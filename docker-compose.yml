@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE=/app/data/fitness_analytics.db
+      - STATIC_DIR=/app/static
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    profiles:
+      - ssl
+
+volumes:
+  sqlite_data:
+  certbot_certs:
+  certbot_www:

@@ -3,8 +3,10 @@ Fitness Analytics Information System - Backend API
 Система анализа персонализированных тренировочных программ
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date, timedelta
@@ -14,6 +16,9 @@ import json
 import random
 from contextlib import contextmanager
 import math
+import hashlib
+import secrets
+import os
 
 app = FastAPI(
     title="Fitness Analytics API",
@@ -29,7 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATABASE = "fitness_analytics.db"
+DATABASE = os.getenv("DATABASE", "fitness_analytics.db")
 
 # ==================== Database ====================
 
@@ -206,8 +211,78 @@ def init_db():
                 FOREIGN KEY (client_id) REFERENCES clients(id)
             )
         """)
-        
+
+        # Пользователи системы (аутентификация)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'client',
+                full_name TEXT NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                trainer_id INTEGER,
+                client_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (trainer_id) REFERENCES trainers(id),
+                FOREIGN KEY (client_id) REFERENCES clients(id)
+            )
+        """)
+
         conn.commit()
+
+
+# ==================== Auth helpers ====================
+
+# Активные токены: token -> {user_id, role, full_name, login, trainer_id, client_id}
+active_tokens: dict = {}
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return f"{salt}:{key.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, key_hex = stored.split(":", 1)
+        key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+        return secrets.compare_digest(key.hex(), key_hex)
+    except Exception:
+        return False
+
+
+def seed_demo_users():
+    """Создаёт демо-пользователей при первом запуске."""
+    demo = [
+        ("admin",    "admin123",   "admin",   "Администратор системы", None, None),
+        ("trainer1", "trainer123", "trainer", "Иван Петров (тренер)",  1,    None),
+        ("client1",  "client123",  "client",  "Клиент (демо)",         None, 1),
+    ]
+    with get_db() as conn:
+        for login, password, role, full_name, trainer_id, client_id in demo:
+            existing = conn.execute(
+                "SELECT id FROM users WHERE login = ?", (login,)
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO users (login, password_hash, role, full_name, trainer_id, client_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (login, _hash_password(password), role, full_name, trainer_id, client_id),
+                )
+        conn.commit()
+
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Dependency: извлекает пользователя из Bearer-токена."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    token = authorization.removeprefix("Bearer ").strip()
+    user = active_tokens.get(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Токен недействителен или истёк")
+    return user
 
 # ==================== Pydantic Models ====================
 
@@ -281,11 +356,61 @@ class TrainerCreate(BaseModel):
     experience_years: Optional[int] = None
     hourly_rate: Optional[float] = None
 
+class LoginRequest(BaseModel):
+    login: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    login: str
+    role: str
+    full_name: str
+    trainer_id: Optional[int] = None
+    client_id: Optional[int] = None
+
 # ==================== API Endpoints ====================
 
 @app.on_event("startup")
 async def startup():
     init_db()
+    seed_demo_users()
+
+# --- Auth ---
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, login, password_hash, role, full_name, trainer_id, client_id "
+            "FROM users WHERE login = ? AND is_active = 1",
+            (body.login,),
+        ).fetchone()
+    if not row or not _verify_password(body.password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    token = secrets.token_hex(32)
+    user_info = {
+        "id": row["id"],
+        "login": row["login"],
+        "role": row["role"],
+        "full_name": row["full_name"],
+        "trainer_id": row["trainer_id"],
+        "client_id": row["client_id"],
+    }
+    active_tokens[token] = user_info
+    return {"token": token, "user": user_info}
+
+
+@app.get("/api/auth/me")
+def me(current_user: dict = Depends(get_current_user)):
+    return current_user
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        active_tokens.pop(token, None)
+    return {"ok": True}
 
 # --- Clients ---
 
@@ -1432,6 +1557,14 @@ async def generate_demo_data():
                 "exercises": len(exercises_data)
             }
         }
+
+STATIC_DIR = os.getenv("STATIC_DIR", "")
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=f"{STATIC_DIR}/assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        return FileResponse(f"{STATIC_DIR}/index.html")
 
 if __name__ == "__main__":
     import uvicorn
