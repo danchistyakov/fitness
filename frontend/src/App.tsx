@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, TrendingDown, DollarSign,
   Target, Activity, HelpCircle, Menu, Lightbulb, ShieldCheck,
-  LogOut, ChevronDown, Shield, UserCheck, User,
+  LogOut, Shield, UserCheck, User,
 } from 'lucide-react';
 import './styles/globals.css';
 
@@ -21,13 +22,13 @@ import { authStore } from './stores';
 // ─── Role-based navigation config ─────────────────────────────────────────────
 
 const ALL_NAV = [
-  { id: 'dashboard',       label: 'Дашборд',        icon: LayoutDashboard, section: 'main' },
-  { id: 'clients',         label: 'Клиенты',         icon: Users,           section: 'main' },
-  { id: 'churn',           label: 'Анализ оттока',   icon: TrendingDown,    section: 'analytics' },
-  { id: 'revenue',         label: 'Финансы',         icon: DollarSign,      section: 'analytics' },
-  { id: 'programs',        label: 'Программы',       icon: Target,          section: 'analytics' },
-  { id: 'recommendations', label: 'Рекомендации',    icon: Lightbulb,       section: 'analytics' },
-  { id: 'access',          label: 'Права доступа',   icon: ShieldCheck,     section: 'system' },
+  { id: 'dashboard',       path: '/',               label: 'Дашборд',        icon: LayoutDashboard, section: 'main' },
+  { id: 'clients',         path: '/clients',        label: 'Клиенты',         icon: Users,           section: 'main' },
+  { id: 'churn',           path: '/churn',          label: 'Анализ оттока',   icon: TrendingDown,    section: 'analytics' },
+  { id: 'revenue',         path: '/revenue',        label: 'Финансы',         icon: DollarSign,      section: 'analytics' },
+  { id: 'programs',        path: '/programs',       label: 'Программы',       icon: Target,          section: 'analytics' },
+  { id: 'recommendations', path: '/recommendations',label: 'Рекомендации',    icon: Lightbulb,       section: 'analytics' },
+  { id: 'access',          path: '/access',         label: 'Права доступа',   icon: ShieldCheck,     section: 'system' },
 ];
 
 const ROLE_PAGES: Record<string, string[]> = {
@@ -44,17 +45,25 @@ const ROLE_META = {
 
 // ─── Sidebar ───────────────────────────────────────────────────────────────────
 
-const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
+const Sidebar = observer(({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
   const role = authStore.role as keyof typeof ROLE_PAGES | null;
   const allowed = role ? ROLE_PAGES[role] : [];
   const visibleNav = ALL_NAV.filter(item => allowed.includes(item.id));
 
-  const mainItems     = visibleNav.filter(i => i.section === 'main');
+  const mainItems      = visibleNav.filter(i => i.section === 'main');
   const analyticsItems = visibleNav.filter(i => i.section === 'analytics');
-  const systemItems   = visibleNav.filter(i => i.section === 'system');
+  const systemItems    = visibleNav.filter(i => i.section === 'system');
 
-  const roleMeta = role ? ROLE_META[role] : null;
+  const roleMeta = role ? ROLE_META[role as keyof typeof ROLE_META] : null;
   const RoleIcon = roleMeta?.icon;
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+
+  const go = (path: string) => { navigate(path); onClose(); };
 
   return (
     <>
@@ -67,7 +76,6 @@ const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
           <div className="logo-text">Fit<span>Analytics</span></div>
         </div>
 
-        {/* Current user */}
         {authStore.user && roleMeta && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '8px',
@@ -97,8 +105,8 @@ const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
             <div className="nav-section">
               <div className="nav-section-title">Основное</div>
               {mainItems.map(item => (
-                <button key={item.id} className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-                  onClick={() => { setCurrentPage(item.id); onClose(); }}>
+                <button key={item.id} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+                  onClick={() => go(item.path)}>
                   <item.icon size={17} /><span>{item.label}</span>
                 </button>
               ))}
@@ -109,8 +117,8 @@ const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
             <div className="nav-section">
               <div className="nav-section-title">Аналитика</div>
               {analyticsItems.map(item => (
-                <button key={item.id} className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-                  onClick={() => { setCurrentPage(item.id); onClose(); }}>
+                <button key={item.id} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+                  onClick={() => go(item.path)}>
                   <item.icon size={17} /><span>{item.label}</span>
                 </button>
               ))}
@@ -121,8 +129,8 @@ const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
             <div className="nav-section">
               <div className="nav-section-title">Система</div>
               {systemItems.map(item => (
-                <button key={item.id} className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
-                  onClick={() => { setCurrentPage(item.id); onClose(); }}>
+                <button key={item.id} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+                  onClick={() => go(item.path)}>
                   <item.icon size={17} /><span>{item.label}</span>
                 </button>
               ))}
@@ -155,9 +163,11 @@ const Sidebar = observer(({ currentPage, setCurrentPage, isOpen, onClose }) => {
 
 // ─── Mobile header ─────────────────────────────────────────────────────────────
 
-const MobileHeader = observer(({ onMenuClick, currentPage }) => {
-  const allItems = [...ALL_NAV];
-  const current = allItems.find(item => item.id === currentPage);
+const MobileHeader = observer(({ onMenuClick }: { onMenuClick: () => void }) => {
+  const location = useLocation();
+  const current = ALL_NAV.find(item =>
+    item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
+  );
   return (
     <header className="mobile-header">
       <button className="mobile-menu-btn" onClick={onMenuClick}>
@@ -173,57 +183,57 @@ const MobileHeader = observer(({ onMenuClick, currentPage }) => {
   );
 });
 
+// ─── Protected route ───────────────────────────────────────────────────────────
+
+const ProtectedRoute = observer(({ element, pageId }: { element: React.ReactElement; pageId: string }) => {
+  if (!authStore.isAuthenticated) return <Navigate to="/login" replace />;
+  const role = authStore.role as keyof typeof ROLE_PAGES;
+  const allowed = ROLE_PAGES[role] ?? [];
+  if (!allowed.includes(pageId)) return <Navigate to="/" replace />;
+  return element;
+});
+
+// ─── App layout (authenticated) ───────────────────────────────────────────────
+
+const AppLayout = observer(() => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  return (
+    <div className="app">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+      <main className="main-content">
+        <Routes>
+          <Route path="/"               element={<ProtectedRoute element={<Dashboard />}       pageId="dashboard" />} />
+          <Route path="/clients"        element={<ProtectedRoute element={<Clients />}          pageId="clients" />} />
+          <Route path="/churn"          element={<ProtectedRoute element={<ChurnAnalytics />}   pageId="churn" />} />
+          <Route path="/revenue"        element={<ProtectedRoute element={<Revenue />}          pageId="revenue" />} />
+          <Route path="/programs"       element={<ProtectedRoute element={<Programs />}         pageId="programs" />} />
+          <Route path="/recommendations"element={<ProtectedRoute element={<Recommendations />}  pageId="recommendations" />} />
+          <Route path="/access"         element={<ProtectedRoute element={<AccessControl />}    pageId="access" />} />
+          <Route path="*"               element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+      <ToastContainer />
+    </div>
+  );
+});
+
 // ─── App ───────────────────────────────────────────────────────────────────────
 
 const App = observer(() => {
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   if (!authStore.isAuthenticated) {
     return (
       <>
-        <Login />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*"      element={<Navigate to="/login" replace />} />
+        </Routes>
         <ToastContainer />
       </>
     );
   }
 
-  // Guard: if current page is not allowed for this role, redirect to dashboard
-  const role = authStore.role as keyof typeof ROLE_PAGES;
-  const allowed = ROLE_PAGES[role] ?? [];
-  const safePage = allowed.includes(currentPage) ? currentPage : 'dashboard';
-
-  const renderPage = () => {
-    switch (safePage) {
-      case 'dashboard':       return <Dashboard />;
-      case 'clients':         return <Clients />;
-      case 'churn':           return <ChurnAnalytics />;
-      case 'revenue':         return <Revenue />;
-      case 'programs':        return <Programs />;
-      case 'recommendations': return <Recommendations />;
-      case 'access':          return <AccessControl />;
-      default:                return <Dashboard />;
-    }
-  };
-
-  return (
-    <div className="app">
-      <Sidebar
-        currentPage={safePage}
-        setCurrentPage={setCurrentPage}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-      <MobileHeader
-        onMenuClick={() => setSidebarOpen(true)}
-        currentPage={safePage}
-      />
-      <main className="main-content">
-        {renderPage()}
-      </main>
-      <ToastContainer />
-    </div>
-  );
+  return <AppLayout />;
 });
 
 export default App;

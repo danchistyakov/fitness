@@ -1,4 +1,3 @@
-import React from 'react';
 import { observer } from 'mobx-react-lite';
 import { X, AlertCircle, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { toastStore } from '../stores';

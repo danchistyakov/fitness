@@ -40,10 +40,18 @@ const StatCard = ({ title, value, icon: Icon, change, changeType, variant = 'def
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
-      <p style={{ color: '#a0a0b0', marginBottom: '4px', fontSize: '0.85rem' }}>{label}</p>
+    <div style={{
+      background: 'var(--bg-elevated)',
+      border: '1px solid var(--border-hover)',
+      borderRadius: '10px',
+      padding: '10px 14px',
+      boxShadow: 'var(--shadow-lg)',
+      fontSize: '0.85rem',
+    }}>
+      <p style={{ color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 500 }}>{label}</p>
       {payload.map((entry, i) => (
-        <p key={i} style={{ color: entry.color, fontWeight: 600 }}>
+        <p key={i} style={{ color: entry.color, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.color, display: 'inline-block', flexShrink: 0 }} />
           {entry.name}: {formatNumber(entry.value)}
         </p>
       ))}
@@ -143,7 +151,7 @@ const Dashboard = observer(() => {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="day" stroke="#6b6b7b" tick={{ fill: '#6b6b7b', fontSize: 12 }} />
               <YAxis stroke="#6b6b7b" tick={{ fill: '#6b6b7b', fontSize: 12 }} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)', radius: 4 }} />
               <Bar dataKey="visits" name="Посещения" fill="#5c7cfa" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

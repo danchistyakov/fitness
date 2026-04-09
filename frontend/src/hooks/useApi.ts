@@ -3,27 +3,41 @@ import { toastStore } from '../stores/ToastStore';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
+interface RequestOptions {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  skipCache?: boolean;
+  cancelPrevious?: boolean;
+  silent?: boolean;
+}
+
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+}
+
 // Простой кэш для запросов
-const cache = new Map();
+const cache = new Map<string, CacheEntry>();
 const CACHE_TTL = 30000; // 30 секунд
 
 // Отслеживание активных запросов для предотвращения дублей
-const pendingRequests = new Map();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 // Генерация ключа кэша
-const getCacheKey = (endpoint, options = {}) => {
+const getCacheKey = (endpoint: string, options: RequestOptions = {}): string => {
   return `${options.method || 'GET'}:${endpoint}`;
 };
 
 // Проверка валидности кэша
-const isCacheValid = (entry) => {
-  return entry && (Date.now() - entry.timestamp) < CACHE_TTL;
+const isCacheValid = (entry: CacheEntry | undefined): boolean => {
+  return !!entry && (Date.now() - entry.timestamp) < CACHE_TTL;
 };
 
 export const useApi = () => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const abortControllerRef = useRef(null);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Очистка при размонтировании
   useEffect(() => {
@@ -34,7 +48,7 @@ export const useApi = () => {
     };
   }, []);
 
-  const request = useCallback(async (endpoint, options = {}) => {
+  const request = useCallback(async (endpoint: string, options: RequestOptions = {}): Promise<unknown> => {
     const cacheKey = getCacheKey(endpoint, options);
     const isGetRequest = !options.method || options.method === 'GET';
 
@@ -42,17 +56,13 @@ export const useApi = () => {
     if (isGetRequest && !options.skipCache) {
       const cached = cache.get(cacheKey);
       if (isCacheValid(cached)) {
-        return cached.data;
+        return cached!.data;
       }
     }
 
     // Проверяем, есть ли уже такой же запрос в процессе
     if (isGetRequest && pendingRequests.has(cacheKey)) {
-      try {
-        return await pendingRequests.get(cacheKey);
-      } catch (err) {
-        throw err;
-      }
+      return pendingRequests.get(cacheKey);
     }
 
     // Отменяем предыдущий запрос если нужно
@@ -65,15 +75,16 @@ export const useApi = () => {
     setLoading(true);
     setError(null);
 
-    const fetchPromise = (async () => {
+    const fetchPromise: Promise<unknown> = (async () => {
       try {
         const response = await fetch(`${API_BASE}${endpoint}`, {
           headers: {
             'Content-Type': 'application/json',
             ...options.headers,
           },
-          signal: abortControllerRef.current.signal,
-          ...options,
+          signal: abortControllerRef.current!.signal,
+          method: options.method,
+          body: options.body,
         });
 
         if (!response.ok) {
@@ -99,16 +110,14 @@ export const useApi = () => {
         setLoading(false);
         return data;
       } catch (err) {
-        if (err.name === 'AbortError') {
-          // Запрос был отменён — не показываем ошибку
+        if (err instanceof Error && err.name === 'AbortError') {
           return null;
         }
 
-        const errorMessage = err.message || 'Произошла ошибка при загрузке данных';
+        const errorMessage = err instanceof Error ? err.message : 'Произошла ошибка при загрузке данных';
         setError(errorMessage);
         setLoading(false);
 
-        // Показываем toast с ошибкой
         if (!options.silent) {
           toastStore.add(errorMessage, 'error');
         }
@@ -119,7 +128,6 @@ export const useApi = () => {
       }
     })();
 
-    // Сохраняем промис для предотвращения дублей
     if (isGetRequest) {
       pendingRequests.set(cacheKey, fetchPromise);
     }
@@ -127,20 +135,19 @@ export const useApi = () => {
     return fetchPromise;
   }, []);
 
-  const get = useCallback((endpoint, options = {}) =>
+  const get = useCallback((endpoint: string, options: RequestOptions = {}) =>
     request(endpoint, { ...options, method: 'GET' }), [request]);
 
-  const post = useCallback((endpoint, data, options = {}) =>
+  const post = useCallback((endpoint: string, data: unknown, options: RequestOptions = {}) =>
     request(endpoint, { ...options, method: 'POST', body: JSON.stringify(data) }), [request]);
 
-  const put = useCallback((endpoint, data, options = {}) =>
+  const put = useCallback((endpoint: string, data: unknown, options: RequestOptions = {}) =>
     request(endpoint, { ...options, method: 'PUT', body: JSON.stringify(data) }), [request]);
 
-  const del = useCallback((endpoint, options = {}) =>
+  const del = useCallback((endpoint: string, options: RequestOptions = {}) =>
     request(endpoint, { ...options, method: 'DELETE' }), [request]);
 
-  // Очистка кэша
-  const clearCache = useCallback((endpoint) => {
+  const clearCache = useCallback((endpoint?: string) => {
     if (endpoint) {
       cache.delete(getCacheKey(endpoint));
     } else {
@@ -148,8 +155,7 @@ export const useApi = () => {
     }
   }, []);
 
-  // Инвалидация кэша после мутации
-  const invalidateCache = useCallback((patterns = []) => {
+  const invalidateCache = useCallback((patterns: string[] = []) => {
     if (patterns.length === 0) {
       cache.clear();
     } else {
@@ -161,20 +167,11 @@ export const useApi = () => {
     }
   }, []);
 
-  return {
-    get,
-    post,
-    put,
-    del,
-    loading,
-    error,
-    clearCache,
-    invalidateCache
-  };
+  return { get, post, put, del, loading, error, clearCache, invalidateCache };
 };
 
 // Format numbers
-export const formatNumber = (num, decimals = 0) => {
+export const formatNumber = (num: number | null | undefined, decimals = 0): string => {
   if (num === null || num === undefined) return '—';
   return new Intl.NumberFormat('ru-RU', {
     minimumFractionDigits: decimals,
@@ -183,7 +180,7 @@ export const formatNumber = (num, decimals = 0) => {
 };
 
 // Format currency
-export const formatCurrency = (amount) => {
+export const formatCurrency = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined) return '—';
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -194,7 +191,7 @@ export const formatCurrency = (amount) => {
 };
 
 // Format date
-export const formatDate = (dateString) => {
+export const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '—';
   return new Date(dateString).toLocaleDateString('ru-RU', {
     day: 'numeric',
@@ -204,7 +201,7 @@ export const formatDate = (dateString) => {
 };
 
 // Subscription type labels
-export const subscriptionLabels = {
+export const subscriptionLabels: Record<string, string> = {
   basic: 'Базовый',
   standard: 'Стандарт',
   premium: 'Премиум',
@@ -212,7 +209,7 @@ export const subscriptionLabels = {
 };
 
 // Goal labels
-export const goalLabels = {
+export const goalLabels: Record<string, string> = {
   weight_loss: 'Похудение',
   muscle_gain: 'Набор массы',
   endurance: 'Выносливость',
@@ -221,14 +218,14 @@ export const goalLabels = {
 };
 
 // Level labels
-export const levelLabels = {
+export const levelLabels: Record<string, string> = {
   beginner: 'Новичок',
   intermediate: 'Средний',
   advanced: 'Продвинутый',
 };
 
 // Risk level labels
-export const riskLabels = {
+export const riskLabels: Record<string, string> = {
   low: 'Низкий',
   medium: 'Средний',
   high: 'Высокий',
