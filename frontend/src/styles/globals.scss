@@ -1,0 +1,171 @@
+@use 'tokens';
+@use 'animations';
+@use 'mixins' as *;
+
+// ── Manrope font-face (локальные .woff2) ───────────────────────────────────
+
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-ExtraLight.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-Light.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('@/assets/fonts/Manrope-ExtraBold.woff2') format('woff2');
+}
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-base);
+  font-weight: var(--fw-regular);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+
+  // Тонкая SVG-noise текстура поверх фона
+  background-image:
+    radial-gradient(at 0% 0%, rgba(0, 212, 170, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(92, 124, 250, 0.04) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+// ── Typography defaults ────────────────────────────────────────────────────
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.125rem; }
+
+p {
+  line-height: 1.6;
+}
+
+a {
+  color: var(--success);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+
+  &:hover { color: color-mix(in srgb, var(--success) 80%, white); }
+}
+
+// ── Form elements baseline ─────────────────────────────────────────────────
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  @include focus-ring;
+}
+
+// ── Scrollbar ──────────────────────────────────────────────────────────────
+
+* {
+  @include scrollbar;
+}
+
+// ── App layout ─────────────────────────────────────────────────────────────
+
+.app {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-7) var(--space-7);
+  margin-left: var(--sidebar-width);
+  animation: fade-in var(--dur-base) var(--ease-out);
+
+  @include mobile {
+    margin-left: 0;
+    padding: var(--space-5) var(--space-4);
+    padding-top: calc(var(--header-height) + var(--space-5));
+  }
+}
+
+// Stagger reveal: добавляйте --i на дочерние элементы для последовательной анимации.
+.stagger > * {
+  animation: fade-in-up var(--dur-base) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}

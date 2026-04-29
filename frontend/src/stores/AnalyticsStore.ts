@@ -1,79 +1,102 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, observable, runInAction } from 'mobx';
+import { api, ApiError } from '@/utils/api';
+import type {
+  ChurnAnalyticsData,
+  ClientAnalytics,
+  ProgramsAnalyticsData,
+  ProgramsMetric,
+  SegmentsData,
+} from '@/types/api';
 import { toastStore } from './ToastStore';
 
-const API = import.meta.env.VITE_API_BASE ?? '/api';
-
 class AnalyticsStore {
-  // Programs
-  programsData: any = null;
-  isLoadingPrograms = false;
-
-  // Revenue
-  revenueData: any = null;
-  isLoadingRevenue = false;
-
-  // Churn
-  churnData: any = null;
+  churn: ChurnAnalyticsData | null = null;
   isLoadingChurn = false;
 
-  // Recommendations
-  recommendationsData: any = null;
-  isLoadingRecommendations = false;
+  segments: SegmentsData | null = null;
+  isLoadingSegments = false;
+  segmentsK = 4;
+
+  programs: ProgramsAnalyticsData | null = null;
+  isLoadingPrograms = false;
+  programsMetric: ProgramsMetric = 'weight_change';
+
+  clientAnalytics: ClientAnalytics | null = null;
+  isLoadingClient = false;
 
   constructor() {
-    makeAutoObservable(this);
-  }
-
-  async loadPrograms() {
-    if (this.isLoadingPrograms) return;
-    this.isLoadingPrograms = true;
-    try {
-      const data = await fetch(`${API}/analytics/programs`).then(r => r.json());
-      runInAction(() => { this.programsData = data; });
-    } catch {
-      toastStore.add('Ошибка загрузки программ', 'error');
-    } finally {
-      runInAction(() => { this.isLoadingPrograms = false; });
-    }
-  }
-
-  async loadRevenue() {
-    if (this.isLoadingRevenue) return;
-    this.isLoadingRevenue = true;
-    try {
-      const data = await fetch(`${API}/analytics/revenue`).then(r => r.json());
-      runInAction(() => { this.revenueData = data; });
-    } catch {
-      toastStore.add('Ошибка загрузки финансов', 'error');
-    } finally {
-      runInAction(() => { this.isLoadingRevenue = false; });
-    }
+    makeAutoObservable(this, {
+      churn: observable.ref,
+      segments: observable.ref,
+      programs: observable.ref,
+      clientAnalytics: observable.ref,
+    });
   }
 
   async loadChurn() {
-    if (this.isLoadingChurn) return;
     this.isLoadingChurn = true;
     try {
-      const data = await fetch(`${API}/analytics/churn`).then(r => r.json());
-      runInAction(() => { this.churnData = data; });
-    } catch {
-      toastStore.add('Ошибка загрузки аналитики оттока', 'error');
+      const data = await api.get<ChurnAnalyticsData>('/analytics/churn');
+      runInAction(() => { this.churn = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки аналитики оттока';
+      toastStore.add(message, 'error');
     } finally {
       runInAction(() => { this.isLoadingChurn = false; });
     }
   }
 
-  async loadRecommendations(skipCache = false) {
-    if (this.isLoadingRecommendations) return;
-    if (!skipCache && this.recommendationsData) return;
-    this.isLoadingRecommendations = true;
+  setSegmentsK(k: number) {
+    this.segmentsK = Math.max(2, Math.min(8, k));
+    this.loadSegments();
+  }
+
+  async loadSegments() {
+    this.isLoadingSegments = true;
     try {
-      const data = await fetch(`${API}/analytics/recommendations`).then(r => r.json());
-      runInAction(() => { this.recommendationsData = data; });
-    } catch {
-      toastStore.add('Ошибка загрузки рекомендаций', 'error');
+      const data = await api.get<SegmentsData>('/analytics/segments', {
+        query: { k: this.segmentsK },
+      });
+      runInAction(() => { this.segments = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки сегментов';
+      toastStore.add(message, 'error');
     } finally {
-      runInAction(() => { this.isLoadingRecommendations = false; });
+      runInAction(() => { this.isLoadingSegments = false; });
+    }
+  }
+
+  setProgramsMetric(metric: ProgramsMetric) {
+    this.programsMetric = metric;
+    this.loadPrograms();
+  }
+
+  async loadPrograms() {
+    this.isLoadingPrograms = true;
+    try {
+      const data = await api.get<ProgramsAnalyticsData>('/analytics/programs', {
+        query: { metric: this.programsMetric },
+      });
+      runInAction(() => { this.programs = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки сравнения программ';
+      toastStore.add(message, 'error');
+    } finally {
+      runInAction(() => { this.isLoadingPrograms = false; });
+    }
+  }
+
+  async loadClient(clientId: number) {
+    this.isLoadingClient = true;
+    try {
+      const data = await api.get<ClientAnalytics>(`/analytics/client/${clientId}`);
+      runInAction(() => { this.clientAnalytics = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки аналитики клиента';
+      toastStore.add(message, 'error');
+      runInAction(() => { this.clientAnalytics = null; });
+    } finally {
+      runInAction(() => { this.isLoadingClient = false; });
     }
   }
 }

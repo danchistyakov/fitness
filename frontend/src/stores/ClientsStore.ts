@@ -1,18 +1,28 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import { api, ApiError } from '@/utils/api';
+import type {
+  Client,
+  ClientCreate,
+  ClientUpdate,
+  ClientsListResponse,
+  CreateResponse,
+} from '@/types/api';
 import { toastStore } from './ToastStore';
 
-const API = import.meta.env.VITE_API_BASE ?? '/api';
+type ActivityFilter = 'all' | 'active' | 'inactive';
 
 class ClientsStore {
-  clients: any[] = [];
+  clients: Client[] = [];
   total = 0;
   search = '';
-  filter: 'all' | 'active' | 'inactive' = 'all';
+  filter: ActivityFilter = 'all';
   isLoading = false;
+  error: string | null = null;
 
-  selectedClientId: number | null = null;
-  clientAnalytics: any = null;
-  isLoadingAnalytics = false;
+  current: Client | null = null;
+  isLoadingCurrent = false;
+
+  private _searchDebounce: number | null = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -20,65 +30,108 @@ class ClientsStore {
 
   setSearch(value: string) {
     this.search = value;
-    this.loadClients();
+    if (this._searchDebounce) window.clearTimeout(this._searchDebounce);
+    this._searchDebounce = window.setTimeout(() => {
+      this.load();
+    }, 250);
   }
 
-  setFilter(value: 'all' | 'active' | 'inactive') {
+  setFilter(value: ActivityFilter) {
     this.filter = value;
-    this.loadClients();
+    this.load();
   }
 
-  async loadClients() {
+  async load() {
     this.isLoading = true;
+    this.error = null;
     try {
-      const params = new URLSearchParams();
-      if (this.search) params.set('search', this.search);
-      if (this.filter === 'active') params.set('is_active', '1');
-      if (this.filter === 'inactive') params.set('is_active', '0');
-
-      const data = await fetch(`${API}/clients?${params}`).then(r => r.json());
+      const data = await api.get<ClientsListResponse>('/clients', {
+        query: {
+          search: this.search || undefined,
+          is_active:
+            this.filter === 'active'   ? 1 :
+            this.filter === 'inactive' ? 0 :
+            undefined,
+        },
+      });
       runInAction(() => {
         this.clients = data.clients;
         this.total = data.total;
       });
-    } catch {
-      toastStore.add('Ошибка загрузки клиентов', 'error');
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки клиентов';
+      runInAction(() => { this.error = message; });
+      toastStore.add(message, 'error');
     } finally {
       runInAction(() => { this.isLoading = false; });
     }
   }
 
-  async addClient(clientData: Record<string, unknown>) {
+  async loadOne(id: number) {
+    this.isLoadingCurrent = true;
     try {
-      const res = await fetch(`${API}/clients`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientData),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      toastStore.add('Клиент добавлен', 'success');
-      await this.loadClients();
-    } catch {
-      toastStore.add('Ошибка добавления клиента', 'error');
-      throw new Error('add failed');
+      const data = await api.get<Client>(`/clients/${id}`);
+      runInAction(() => { this.current = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Клиент не найден';
+      toastStore.add(message, 'error');
+      runInAction(() => { this.current = null; });
+    } finally {
+      runInAction(() => { this.isLoadingCurrent = false; });
     }
   }
 
-  selectClient(id: number | null) {
-    this.selectedClientId = id;
-    this.clientAnalytics = null;
-    if (id !== null) this.loadClientAnalytics(id);
+  async create(payload: ClientCreate): Promise<number | null> {
+    try {
+      const res = await api.post<CreateResponse>('/clients', payload);
+      toastStore.add('Клиент добавлен', 'success');
+      await this.load();
+      return res.id;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка добавления клиента';
+      toastStore.add(message, 'error');
+      return null;
+    }
   }
 
-  async loadClientAnalytics(id: number) {
-    this.isLoadingAnalytics = true;
+  async update(id: number, payload: ClientUpdate): Promise<boolean> {
     try {
-      const data = await fetch(`${API}/analytics/client/${id}`).then(r => r.json());
-      runInAction(() => { this.clientAnalytics = data; });
-    } catch {
-      toastStore.add('Ошибка загрузки профиля клиента', 'error');
-    } finally {
-      runInAction(() => { this.isLoadingAnalytics = false; });
+      await api.put(`/clients/${id}`, payload);
+      toastStore.add('Клиент обновлён', 'success');
+      if (this.current?.id === id) await this.loadOne(id);
+      await this.load();
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка сохранения';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async deactivate(id: number): Promise<boolean> {
+    try {
+      await api.delete(`/clients/${id}`);
+      toastStore.add('Клиент деактивирован', 'success');
+      await this.load();
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка операции';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async assignTrainer(clientId: number, trainerId: number): Promise<boolean> {
+    try {
+      await api.post(`/clients/${clientId}/assign-trainer`, { trainer_id: trainerId });
+      toastStore.add('Тренер назначен', 'success');
+      if (this.current?.id === clientId) await this.loadOne(clientId);
+      await this.load();
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка назначения тренера';
+      toastStore.add(message, 'error');
+      return false;
     }
   }
 }

@@ -1,0 +1,278 @@
+@use '@/styles/mixins' as *;
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.fullSpan {
+  grid-column: 1 / -1;
+}
+
+.warnBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: var(--radius-md);
+  font-size: 0.86rem;
+
+  strong { color: var(--warning); }
+
+  div { color: var(--text-primary); }
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px var(--space-3);
+  font-size: 0.86rem;
+}
+
+.dt {
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.dd {
+  color: var(--text-primary);
+}
+
+.healthText {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.goalsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.goal {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.goalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.goalMetric {
+  font-size: 0.92rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.goalTarget {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.goalProgress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.goalProgressBar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.goalProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 70%, var(--info)));
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+.goalProgressLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  @include tabular-nums;
+  white-space: nowrap;
+}
+
+.insights {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.insight {
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: 0.86rem;
+  border-left: 3px solid var(--text-muted);
+
+  &[data-type='positive'] {
+    background: var(--success-soft);
+    border-left-color: var(--success);
+    color: var(--text-primary);
+  }
+
+  &[data-type='warning'] {
+    background: var(--warning-soft);
+    border-left-color: var(--warning);
+    color: var(--text-primary);
+  }
+}
+
+.factorsList {
+  list-style: none;
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.factor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.82rem;
+  color: var(--warning);
+}
+
+// ── Program Results ─────────────────────────────────────────────────────────
+
+.programResultsBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.programStatsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.programStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.programStatValue {
+  font-size: 1.1rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  @include tabular-nums;
+}
+
+.programStatLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.programSectionTitle {
+  font-size: 0.86rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.programMetricsRow {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.programMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.metricBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+
+.metricBadgePos {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.metricBadgeNeg {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.metricBadgeLabel {
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.metricBadgeValue {
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+  @include tabular-nums;
+}
+
+.programExerciseProgress {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.exerciseTableWrap {
+  overflow-x: auto;
+}
+
+.exerciseTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+
+  th {
+    text-align: left;
+    padding: 8px 10px;
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 10px;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .num {
+    text-align: right;
+    @include tabular-nums;
+    color: var(--text-secondary);
+  }
+}
+
+.programRecommendations {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}

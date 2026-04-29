@@ -1,0 +1,34 @@
+@use '@/styles/mixins' as *;
+
+.filtersCard {
+  overflow: visible;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 180px 180px 1fr;
+  gap: var(--space-3);
+
+  @include mobile { grid-template-columns: 1fr; }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+
+  @include mobile { grid-template-columns: 1fr; }
+}
+
+.formRow:has(> :nth-child(4)) {
+  grid-template-columns: repeat(4, 1fr);
+
+  @include tablet { grid-template-columns: repeat(2, 1fr); }
+  @include mobile { grid-template-columns: 1fr 1fr; }
+}

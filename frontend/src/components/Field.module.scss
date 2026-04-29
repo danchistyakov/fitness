@@ -1,0 +1,27 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+}
+
+.required {
+  margin-left: 3px;
+  color: var(--danger);
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: 0.75rem;
+  color: var(--danger);
+}

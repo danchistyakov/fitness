@@ -1,0 +1,63 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: var(--fw-medium);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.size-sm {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.size-md {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.variant-success {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.variant-warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+
+.variant-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.variant-info {
+  background: var(--info-soft);
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 30%, transparent);
+}
+
+.variant-purple {
+  background: var(--purple-soft);
+  color: var(--purple);
+  border-color: color-mix(in srgb, var(--purple) 30%, transparent);
+}
+
+.variant-neutral {
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}

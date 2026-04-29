@@ -1,0 +1,83 @@
+@use '@/styles/mixins' as *;
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 200px 200px;
+  gap: var(--space-3);
+  align-items: center;
+
+  @include mobile { grid-template-columns: 1fr; }
+}
+
+.searchWrap { width: 100%; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.exercise {
+  transition: border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+}
+
+.exerciseHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.exerciseIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.exerciseName {
+  font-size: 0.92rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  @include line-clamp(1);
+}
+
+.exerciseMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.exerciseEquip {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.exerciseCals {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  @include tabular-nums;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+
+  @include mobile { grid-template-columns: 1fr; }
+}

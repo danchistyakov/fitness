@@ -1,0 +1,53 @@
+@use '@/styles/mixins' as *;
+
+.page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-7);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+  animation: fade-in-down var(--dur-base) var(--ease-out);
+
+  @include mobile {
+    flex-direction: column;
+    margin-bottom: var(--space-5);
+  }
+}
+
+.heading {
+  min-width: 0;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.subtitle {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  max-width: 60ch;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}

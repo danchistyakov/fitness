@@ -19,7 +19,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+COPY main.py db.py models.py ./
+COPY alembic ./alembic
+COPY alembic.ini .
 COPY --from=frontend-builder /app/frontend/dist ./static
 
 ENV DATABASE=/app/data/fitness_analytics.db

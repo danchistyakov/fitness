@@ -1,0 +1,55 @@
+@use '@/styles/mixins' as *;
+
+.wrapper {
+  overflow-x: auto;
+  @include scrollbar;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.headCell {
+  padding: var(--space-3) var(--space-3);
+  font-size: 0.72rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.bodyCell {
+  padding: 11px var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.mono {
+  @include tabular-nums;
+}
+
+.rowClickable {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    background: var(--bg-2);
+  }
+}
+
+.skeleton {
+  padding: var(--space-3);
+}
+
+tbody tr:last-child .bodyCell {
+  border-bottom: none;
+}

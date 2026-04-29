@@ -1,0 +1,211 @@
+@use '@/styles/mixins' as *;
+
+.root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background:
+    radial-gradient(ellipse at top, rgba(0, 212, 170, 0.08), transparent 50%),
+    radial-gradient(ellipse at bottom, rgba(92, 124, 250, 0.06), transparent 50%),
+    var(--bg-0);
+}
+
+.shell {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: fade-in-up 320ms var(--ease-out);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.brandIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--success), color-mix(in srgb, var(--success) 75%, var(--info)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 36px rgba(0, 212, 170, 0.35), var(--shadow-2);
+}
+
+.brandTitle {
+  font-size: 1.4rem;
+  font-weight: var(--fw-extrabold);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.brandAccent {
+  color: var(--success);
+}
+
+.brandSubtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  max-width: 32ch;
+}
+
+.card {
+  @include card;
+  padding: var(--space-7) var(--space-6);
+}
+
+.cardTitle {
+  font-size: 1.15rem;
+  font-weight: var(--fw-semibold);
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+
+.cardSubtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-5);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.passwordWrap {
+  position: relative;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  background: transparent;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-3);
+  }
+}
+
+.errorBanner {
+  padding: 10px var(--space-3);
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.demos {
+  @include card;
+  padding: var(--space-4) var(--space-5);
+}
+
+.demosTitle {
+  font-size: 0.7rem;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.demosList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.demo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-3);
+  }
+}
+
+.demoIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.demoBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.demoRole {
+  font-size: 0.85rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  @include truncate;
+}
+
+.demoLogin {
+  color: var(--text-muted);
+  font-weight: var(--fw-regular);
+}
+
+.demoHint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  @include truncate;
+}
+
+.demoPwd {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  @include tabular-nums;
+  font-family: inherit;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+}
+
+.footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: var(--space-2);
+}

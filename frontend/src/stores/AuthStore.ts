@@ -1,16 +1,8 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import { api, ApiError, configureApi } from '@/utils/api';
+import type { AuthUser, LoginResponse } from '@/types/api';
 
-const API = import.meta.env.VITE_API_BASE ?? '/api';
 const STORAGE_KEY = 'fit_auth';
-
-export interface AuthUser {
-  id: number;
-  login: string;
-  role: 'admin' | 'trainer' | 'client';
-  full_name: string;
-  trainer_id: number | null;
-  client_id: number | null;
-}
 
 class AuthStore {
   user: AuthUser | null = null;
@@ -21,6 +13,10 @@ class AuthStore {
   constructor() {
     makeAutoObservable(this);
     this._restoreSession();
+    configureApi({
+      getToken: () => this.token,
+      onUnauthorized: () => this._handleUnauthorized(),
+    });
   }
 
   get isAuthenticated() {
@@ -35,9 +31,9 @@ class AuthStore {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const { user, token } = JSON.parse(raw);
-      this.user = user;
-      this.token = token;
+      const parsed = JSON.parse(raw) as { user: AuthUser; token: string };
+      this.user = parsed.user;
+      this.token = parsed.token;
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -45,49 +41,47 @@ class AuthStore {
 
   private _persist() {
     if (this.user && this.token) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: this.user, token: this.token }));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ user: this.user, token: this.token }),
+      );
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
   }
 
-  async login(login: string, password: string) {
+  private _handleUnauthorized() {
+    runInAction(() => {
+      this.user = null;
+      this.token = null;
+      this._persist();
+    });
+  }
+
+  async login(login: string, password: string): Promise<void> {
     this.isLoading = true;
     this.error = null;
     try {
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, password }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Неверный логин или пароль');
-      }
-      const data = await res.json();
+      const data = await api.post<LoginResponse>('/auth/login', { login, password });
       runInAction(() => {
         this.user = data.user;
         this.token = data.token;
         this._persist();
       });
-    } catch (e: any) {
-      runInAction(() => { this.error = e.message; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка входа';
+      runInAction(() => { this.error = message; });
       throw e;
     } finally {
       runInAction(() => { this.isLoading = false; });
     }
   }
 
-  async logout() {
+  async logout(): Promise<void> {
     if (this.token) {
-      fetch(`${API}/auth/logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.token}` },
-      }).catch(() => {});
+      api.post('/auth/logout').catch(() => { /* ignore */ });
     }
-    this.user = null;
-    this.token = null;
-    this._persist();
+    this._handleUnauthorized();
   }
 }
 

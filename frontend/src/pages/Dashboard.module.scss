@@ -1,0 +1,71 @@
+@use '@/styles/mixins' as *;
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.chartsGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.trainersList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.trainerRow {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.trainerRank {
+  font-size: 0.78rem;
+  font-weight: var(--fw-bold);
+  color: var(--text-muted);
+  @include tabular-nums;
+}
+
+.trainerName {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+  @include truncate;
+}
+
+.trainerStats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.trainerSessions {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  @include tabular-nums;
+}
+
+.trainerRating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: var(--fw-semibold);
+  color: var(--warning);
+  @include tabular-nums;
+}

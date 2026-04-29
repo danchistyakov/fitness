@@ -1,0 +1,142 @@
+@use '@/styles/mixins' as *;
+
+.plot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.axisHeader {
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+
+  > span:nth-child(1) {
+    grid-column: 1 / 2;
+    text-align: right;
+    padding-right: var(--space-3);
+  }
+  > span:nth-child(3) {
+    grid-column: 2 / 3;
+    text-align: right;
+    padding-right: var(--space-3);
+  }
+}
+
+.refLabel {
+  grid-column: 2 / 3 !important;
+  text-align: center !important;
+  padding-right: 0 !important;
+  color: var(--text-secondary);
+  font-weight: var(--fw-medium);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 200px 1fr 220px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 0;
+  font-size: 0.85rem;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}
+
+.label {
+  color: var(--text-primary);
+  font-weight: var(--fw-medium);
+  text-align: right;
+  @include truncate;
+
+  @include mobile { text-align: left; }
+}
+
+.track {
+  position: relative;
+  height: 22px;
+}
+
+.refLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+  transform: translateX(-0.5px);
+}
+
+.ci {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  background: var(--text-muted);
+  transform: translateY(-50%);
+  border-radius: 1px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.ciSignificant {
+  background: var(--success);
+}
+
+.point {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--text-secondary);
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 2px solid var(--bg-1);
+  z-index: 2;
+}
+
+.pointSignificant {
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--success-soft);
+}
+
+.values {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  font-size: 0.8rem;
+  @include tabular-nums;
+}
+
+.hr {
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  min-width: 36px;
+  text-align: right;
+}
+
+.ci_text {
+  color: var(--text-muted);
+}
+
+.p {
+  color: var(--text-muted);
+  min-width: 60px;
+  text-align: right;
+}
+
+.pSignificant {
+  color: var(--success);
+  font-weight: var(--fw-semibold);
+}
