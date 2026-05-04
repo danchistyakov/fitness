@@ -4,8 +4,6 @@ import {
   Component as Cluster,
   Users,
   Sparkles,
-  Info,
-  ChevronRight,
   TrendingUp,
   TrendingDown,
   Calendar,
@@ -24,7 +22,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Field } from '@/components/Field';
 import { Select } from '@/components/Input';
 import { Badge } from '@/components/Badge';
-import { PCAScatter } from '@/components/PCAScatter';
+
 import { clusterColor, formatNumber } from '@/utils/format';
 import s from './Segments.module.scss';
 
@@ -371,75 +369,6 @@ function SegmentsBody({ data }: BodyProps) {
         </div>
       </Card>
 
-      {/* ── ДЕТАЛИ ───────────────────────────────────────────────── */}
-      <details className={s.details}>
-        <summary className={s.detailsSummary}>
-          <Info size={14} />
-          <span>Для аналитика: PCA-проекция и центроиды</span>
-          <ChevronRight size={14} className={s.detailsChevron} />
-        </summary>
-
-        <div className={s.detailsBody}>
-          <div className={s.detailsTestInfo}>
-            <div>
-              <span className={s.detailsLabel}>Метод</span>
-              <span className={s.detailsValue}>K-means + PCA</span>
-            </div>
-            <div>
-              <span className={s.detailsLabel}>Silhouette score</span>
-              <span className={s.detailsValue}>
-                {data.silhouette !== null ? data.silhouette.toFixed(3) : '—'}
-              </span>
-            </div>
-            <div>
-              <span className={s.detailsLabel}>Объяснённая дисперсия</span>
-              <span className={s.detailsValue}>
-                {(data.explained_variance.reduce((a, b) => a + b, 0) * 100).toFixed(1)}%
-                {' '}
-                <span className={s.detailsValueMuted}>
-                  (PC1: {(data.explained_variance[0] * 100).toFixed(1)}% • PC2: {(data.explained_variance[1] * 100).toFixed(1)}%)
-                </span>
-              </span>
-            </div>
-          </div>
-
-          <div className={s.scatterWrap}>
-            <PCAScatter points={data.points} height={420} />
-          </div>
-
-          <div className={s.tableWrap}>
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  <th>Кластер</th>
-                  <th align="right">Размер</th>
-                  {FEATURE_KEYS.map(f => (
-                    <th key={f} align="right">{FEATURES[f].short}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.clusters.map(c => (
-                  <tr key={c.cluster}>
-                    <td>
-                      <span className={s.clusterCell}>
-                        <span className={s.swatch} style={{ background: clusterColor(c.cluster) }} />
-                        Кластер {c.cluster}
-                      </span>
-                    </td>
-                    <td className={s.num}>{c.size}</td>
-                    {FEATURE_KEYS.map(f => (
-                      <td key={f} className={s.num}>
-                        {c.centroid[f]?.toFixed(1) ?? '—'}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </details>
     </div>
   );
 }

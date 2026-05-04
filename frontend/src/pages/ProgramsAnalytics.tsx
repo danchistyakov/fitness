@@ -6,10 +6,8 @@ import {
   Scale,
   Flame,
   Dumbbell,
-  Info,
   Users,
   Target,
-  ChevronRight,
 } from 'lucide-react';
 import { analyticsStore } from '@/stores';
 import type {
@@ -285,98 +283,6 @@ function Body({ data, cfg }: BodyProps) {
         findings={findings}
       />
 
-      {/* ── ДЛЯ АНАЛИТИКА ────────────────────────────────────────────── */}
-      <details className={s.details}>
-        <summary className={s.detailsSummary}>
-          <Info size={14} />
-          <span>Для аналитика: статистические подробности</span>
-          <ChevronRight size={14} className={s.detailsChevron} />
-        </summary>
-
-        <div className={s.detailsBody}>
-          <div className={s.detailsTestInfo}>
-            <div>
-              <span className={s.detailsLabel}>Применённый тест</span>
-              <span className={s.detailsValue}>{data.overall_test.test}</span>
-            </div>
-            <div>
-              <span className={s.detailsLabel}>Глобальный p-value</span>
-              <span className={s.detailsValue}>
-                {data.overall_test.p_value < 0.001 ? '<0.001' : data.overall_test.p_value.toFixed(3)}
-              </span>
-            </div>
-            <div>
-              <span className={s.detailsLabel}>Нормальность распределений</span>
-              <span className={s.detailsValue}>{data.all_normal ? 'Все группы нормальны' : 'Не все группы нормальны'}</span>
-            </div>
-          </div>
-
-          <div className={s.tableWrap}>
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  <th>Программа</th>
-                  <th align="right">N</th>
-                  <th align="right">Среднее</th>
-                  <th align="right">СКО</th>
-                  <th align="right">Медиана</th>
-                  <th align="right">Шапиро p</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.descriptive.map(d => {
-                  const norm = data.normality[d.program];
-                  return (
-                    <tr key={d.program}>
-                      <td>{d.program}</td>
-                      <td className={s.num}>{d.n}</td>
-                      <td className={s.num}>{d.mean.toFixed(2)}</td>
-                      <td className={s.num}>{d.std.toFixed(2)}</td>
-                      <td className={s.num}>{d.median.toFixed(2)}</td>
-                      <td className={s.num}>
-                        {norm
-                          ? (norm.p_value < 0.001 ? '<0.001' : norm.p_value.toFixed(3))
-                          : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {data.pairwise.length > 0 && (
-            <div className={s.tableWrap}>
-              <table className={s.table}>
-                <thead>
-                  <tr>
-                    <th>Пара</th>
-                    <th>Метод</th>
-                    <th align="right">Δ среднее</th>
-                    <th align="right">95% ДИ</th>
-                    <th align="right">d Коэна</th>
-                    <th align="right">p (raw)</th>
-                    <th align="right">p (Холм)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.pairwise.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.program_a} vs {p.program_b}</td>
-                      <td>{p.method}</td>
-                      <td className={s.num}>{p.mean_diff.toFixed(2)}</td>
-                      <td className={s.num}>[{p.ci95[0].toFixed(2)}; {p.ci95[1].toFixed(2)}]</td>
-                      <td className={s.num}>{p.cohens_d.toFixed(2)}</td>
-                      <td className={s.num}>{p.p_value < 0.001 ? '<0.001' : p.p_value.toFixed(3)}</td>
-                      <td className={s.num}>{p.p_value_holm < 0.001 ? '<0.001' : p.p_value_holm.toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </details>
     </div>
   );
 }

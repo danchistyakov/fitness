@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
@@ -14,8 +14,8 @@ import SessionDetail from '@/pages/SessionDetail';
 import ChurnAnalytics from '@/pages/ChurnAnalytics';
 import Segments from '@/pages/Segments';
 import ProgramsAnalytics from '@/pages/ProgramsAnalytics';
+import GymLoad from '@/pages/GymLoad';
 import Recommendations from '@/pages/Recommendations';
-import AccessControl from '@/pages/AccessControl';
 import TrainersAccounts from '@/pages/TrainersAccounts';
 
 import Sidebar from '@/components/Sidebar';
@@ -47,6 +47,22 @@ const ProtectedRoute = observer(({ element, pageId, ownershipCheck }: ProtectedP
 
 const ClientOwnedRoute = observer(({ element }: { element: ReactElement }) => {
   if (!authStore.isAuthenticated) return <Navigate to="/login" replace />;
+  const { id } = useParams<{ id: string }>();
+  const numericId = id ? parseInt(id, 10) : NaN;
+
+  // Клиент может видеть только свой профиль
+  if (authStore.role === 'client' && authStore.user?.client_id !== numericId) {
+    return <Navigate to="/" replace />;
+  }
+  // Для тренера и админа — разрешаем, backend проверит права
+  return element;
+});
+
+const SessionOwnedRoute = observer(({ element }: { element: ReactElement }) => {
+  if (!authStore.isAuthenticated) return <Navigate to="/login" replace />;
+  // Клиент: разрешаем, сама страница загрузит сессию и получит 403 если чужая
+  // Тренер: разрешаем, backend проверит
+  // Админ: разрешаем
   return element;
 });
 
@@ -65,12 +81,12 @@ const AppLayout = observer(() => {
           <Route path="/programs"            element={<ProtectedRoute element={<Programs />}           pageId="programs" />} />
           <Route path="/programs/:id"        element={<ProtectedRoute element={<ProgramEditor />}      pageId="programs" />} />
           <Route path="/sessions"            element={<ProtectedRoute element={<Sessions />}           pageId="sessions" />} />
-          <Route path="/sessions/:id"        element={<ClientOwnedRoute element={<SessionDetail />} />} />
+          <Route path="/sessions/:id"        element={<SessionOwnedRoute element={<SessionDetail />} />} />
           <Route path="/churn"               element={<ProtectedRoute element={<ChurnAnalytics />}     pageId="churn" />} />
           <Route path="/segments"            element={<ProtectedRoute element={<Segments />}           pageId="segments" />} />
           <Route path="/programs-analytics"  element={<ProtectedRoute element={<ProgramsAnalytics />}  pageId="programs-analytics" />} />
+          <Route path="/gym-load"              element={<ProtectedRoute element={<GymLoad />}            pageId="gym-load" />} />
           <Route path="/recommendations"     element={<ProtectedRoute element={<Recommendations />}    pageId="recommendations" />} />
-          <Route path="/access"              element={<ProtectedRoute element={<AccessControl />}      pageId="access" />} />
           <Route path="/trainers-accounts"   element={<ProtectedRoute element={<TrainersAccounts />} pageId="trainers-accounts" />} />
           <Route path="*"                    element={<Navigate to="/" replace />} />
         </Routes>

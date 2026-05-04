@@ -54,7 +54,6 @@ const ClientProfile = observer(() => {
 
   useEffect(() => {
     if (Number.isNaN(clientId)) return;
-    clientsStore.loadOne(clientId);
     analyticsStore.loadClient(clientId);
   }, [clientId]);
 
@@ -64,7 +63,7 @@ const ClientProfile = observer(() => {
     );
   }
 
-  const client = clientsStore.current;
+  const client = analyticsStore.clientAnalytics?.client;
   if (!client) {
     return (
       <Page title="Загрузка…" actions={
@@ -110,7 +109,7 @@ const ClientProfile = observer(() => {
 });
 
 const ProfileTab = observer(() => {
-  const c = clientsStore.current;
+  const c = analyticsStore.clientAnalytics?.client;
   if (!c) return null;
 
   return (
@@ -163,10 +162,7 @@ function Item({ k, v }: { k: string; v: React.ReactNode }) {
 
 const GoalsTab = observer(({ clientId }: { clientId: number }) => {
   const [creating, setCreating] = useState(false);
-
-  useEffect(() => {
-    goalsStore.load(clientId);
-  }, [clientId]);
+  const goals = analyticsStore.clientAnalytics?.goals ?? [];
 
   return (
     <Card
@@ -178,11 +174,11 @@ const GoalsTab = observer(({ clientId }: { clientId: number }) => {
         </Button>
       }
     >
-      {goalsStore.goals.length === 0 ? (
+      {goals.length === 0 ? (
         <Empty title="Целей не задано" description="Добавьте цель, чтобы отслеживать прогресс" />
       ) : (
         <ul className={s.goalsList}>
-          {goalsStore.goals.map((g: ClientGoal) => (
+          {goals.map((g: ClientGoal) => (
             <li key={g.id} className={s.goal}>
               <div className={s.goalHeader}>
                 <div>
@@ -406,6 +402,18 @@ const MetricsTab = observer(() => {
     muscle: m.muscle_mass,
   }));
 
+  const weights = data.map(d => d.weight).filter((v): v is number => v != null);
+  const muscles = data.map(d => d.muscle).filter((v): v is number => v != null);
+  const bodyFats = data.map(d => d.body_fat).filter((v): v is number => v != null);
+
+  const minKg = Math.min(...weights, ...muscles);
+  const maxKg = Math.max(...weights, ...muscles);
+  const kgPadding = maxKg > minKg ? (maxKg - minKg) * 0.15 : 2;
+
+  const minFat = Math.min(...bodyFats);
+  const maxFat = Math.max(...bodyFats);
+  const fatPadding = maxFat > minFat ? (maxFat - minFat) * 0.15 : 2;
+
   return (
     <div className={s.grid}>
       <Card title="Динамика веса" className={s.fullSpan}>
@@ -415,14 +423,15 @@ const MetricsTab = observer(() => {
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
               <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 11 }}
                 tickFormatter={(v) => formatDate(v).slice(0, 6)} />
-              <YAxis stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="left" domain={[minKg - kgPadding, maxKg + kgPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="right" orientation="right" domain={[minFat - fatPadding, maxFat + fatPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
               <Tooltip
                 contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)' }}
                 labelFormatter={(v) => formatDate(v)}
               />
-              <Line dataKey="weight" name="Вес, кг" stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 3 }} />
-              <Line dataKey="muscle" name="Мышцы, кг" stroke="var(--chart-2)" strokeWidth={2} dot={{ r: 3 }} />
-              <Line dataKey="body_fat" name="% жира" stroke="var(--chart-4)" strokeWidth={2} dot={{ r: 3 }} />
+              <Line yAxisId="left" dataKey="weight" name="Вес, кг" stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 3 }} />
+              <Line yAxisId="left" dataKey="muscle" name="Мышцы, кг" stroke="var(--chart-2)" strokeWidth={2} dot={{ r: 3 }} />
+              <Line yAxisId="right" dataKey="body_fat" name="% жира" stroke="var(--chart-4)" strokeWidth={2} dot={{ r: 3 }} />
               <Legend
                 wrapperStyle={{ fontSize: '0.78rem' }}
                 formatter={(v) => <span style={{ color: 'var(--text-secondary)' }}>{v}</span>}

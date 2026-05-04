@@ -525,6 +525,16 @@ export type ProgramsAnalyticsData =
       pairwise: PairwiseComparison[];
     };
 
+// ── Gym Load ──────────────────────────────────────────────────────────────
+
+export interface GymLoadData {
+  total_sessions_30d: number;
+  avg_per_day: number;
+  by_hour: Array<{ hour: number; visits: number }>;
+  by_weekday_hour: Array<{ day: string; hours: number[] }>;
+  peak_hours: Array<{ hour: number; visits: number }>;
+}
+
 // ── Common ────────────────────────────────────────────────────────────────
 
 export interface CreateResponse {
@@ -572,15 +582,4 @@ export interface CalendarItem {
   planned_date: string;
   day_of_week: number | null;
   status: string;
-}
-
-// ── Backup ────────────────────────────────────────────────────────────────
-
-export interface BackupInfo {
-  backup_file: string;
-  message: string;
-}
-
-export interface BackupsList {
-  backups: string[];
 }

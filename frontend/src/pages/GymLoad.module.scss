@@ -1,0 +1,242 @@
+@use '@/styles/mixins' as *;
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.hero {
+  position: relative;
+  padding: var(--space-8) var(--space-7) var(--space-7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(120% 80% at 0% 0%, var(--info-soft), transparent 55%),
+    radial-gradient(80% 60% at 100% 100%, rgba(92, 124, 250, 0.08), transparent 60%),
+    var(--bg-1);
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 56px 56px;
+    opacity: 0.18;
+    mask-image: radial-gradient(80% 80% at 70% 0%, #000 0%, transparent 75%);
+  }
+
+  @include mobile {
+    padding: var(--space-6) var(--space-5);
+  }
+}
+
+.heroEyebrow {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.72rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-5);
+}
+
+.heroQuestion {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(1.35rem, 1.1rem + 1vw, 1.8rem);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+  line-height: 1.3;
+  margin-bottom: var(--space-6);
+  max-width: 32ch;
+}
+
+.heroBody {
+  position: relative;
+  z-index: 1;
+}
+
+.heroSayHi {
+  font-size: 0.78rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--info);
+  margin-bottom: var(--space-2);
+}
+
+.heroNumber {
+  font-size: clamp(2.2rem, 1.4rem + 3vw, 3.6rem);
+  font-weight: var(--fw-extrabold);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: var(--space-5);
+  @include tabular-nums;
+}
+
+.heroUnit {
+  font-size: 0.42em;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.heroLine {
+  font-size: clamp(1rem, 0.95rem + 0.2vw, 1.15rem);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 60ch;
+
+  strong { color: var(--text-primary); font-weight: var(--fw-semibold); }
+}
+
+.heroChips {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-7);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.heroChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.heroChipWarning {
+  border-color: rgba(251, 191, 36, 0.25);
+  background: var(--warning-soft);
+}
+
+.heroChipIcon {
+  display: inline-flex;
+  color: var(--text-muted);
+
+  .heroChipWarning & { color: var(--warning); }
+}
+
+.heroChipLabel {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.heroChipValue {
+  font-size: 0.85rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  @include tabular-nums;
+}
+
+.chartWrap {
+  width: 100%;
+  height: 300px;
+}
+
+// ── тепловая карта ─────────────────────────────────────────────────────────
+
+.heatmapWrap {
+  overflow-x: auto;
+  @include scrollbar;
+  padding-bottom: var(--space-2);
+}
+
+.heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 720px;
+}
+
+.heatmapRow {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.heatmapCorner {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.heatmapColHeader {
+  flex: 1;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  padding: 2px 0;
+}
+
+.heatmapRowHeader {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: var(--fw-semibold);
+}
+
+.heatmapCell {
+  flex: 1;
+  aspect-ratio: 1.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 0.68rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  transition: transform 0.1s var(--ease-out);
+  cursor: default;
+
+  &:hover {
+    transform: scale(1.15);
+    z-index: 1;
+    box-shadow: 0 0 0 1px var(--border-strong);
+  }
+}
+
+.heatmapCellLight {
+  color: #fff;
+}
+
+.heatmapLegend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.heatmapLegendBar {
+  width: 120px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--bg-2), var(--info));
+  border: 1px solid var(--border);
+}

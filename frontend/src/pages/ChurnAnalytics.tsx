@@ -7,7 +7,6 @@ import {
   HeartPulse,
   Calendar,
   ChevronRight,
-  Info,
   ShieldCheck,
   ShieldAlert,
   Sparkles,
@@ -27,7 +26,6 @@ import { Empty } from '@/components/Empty';
 import { Skeleton } from '@/components/Skeleton';
 import { Badge } from '@/components/Badge';
 import { ScoreBreakdown } from '@/components/ScoreBreakdown';
-import { KaplanMeierChart } from '@/components/KaplanMeierChart';
 import { ForestPlot } from '@/components/ForestPlot';
 import {
   formatDate, subscriptionLabels,
@@ -195,6 +193,9 @@ function Body({ data }: { data: ChurnAnalyticsData }) {
                 <FactorRow key={c.covariate} cox={c} sentence={sentence} />
               ))}
           </ul>
+          <div style={{ marginTop: 24 }}>
+            <ForestPlot coefficients={cox_regression.coefficients} />
+          </div>
           <p className={s.factorsFootnote}>
             Зависимости рассчитаны на текущей выборке клиентов.
             Признаки со статусом «связь не доказана» требуют большего объёма
@@ -242,86 +243,6 @@ function Body({ data }: { data: ChurnAnalyticsData }) {
         </div>
       </Card>
 
-      {/* ── ДЕТАЛИ ─────────────────────────────────────────────── */}
-      <details className={s.details}>
-        <summary className={s.detailsSummary}>
-          <Info size={14} />
-          <span>Для аналитика: модель Кокса и кривые Каплана-Майера</span>
-          <ChevronRight size={14} className={s.detailsChevron} />
-        </summary>
-
-        <div className={s.detailsBody}>
-          {cox_regression.available ? (
-            <>
-              <div className={s.detailsTestInfo}>
-                <div>
-                  <span className={s.detailsLabel}>Метод</span>
-                  <span className={s.detailsValue}>Cox Proportional Hazards</span>
-                </div>
-                <div>
-                  <span className={s.detailsLabel}>C-индекс</span>
-                  <span className={s.detailsValue}>{cox_regression.concordance_index}</span>
-                </div>
-                <div>
-                  <span className={s.detailsLabel}>Наблюдений</span>
-                  <span className={s.detailsValue}>{cox_regression.n} (событий: {cox_regression.events})</span>
-                </div>
-              </div>
-              <div className={s.forestWrap}>
-                <ForestPlot coefficients={cox_regression.coefficients} />
-              </div>
-            </>
-          ) : (
-            <Empty title="Регрессия Кокса недоступна" description={cox_regression.reason} />
-          )}
-
-          {survival_analysis.available ? (
-            <div className={s.detailsKM}>
-              <div className={s.detailsLabel}>Кривые Каплана-Майера</div>
-              <KaplanMeierChart curves={survival_analysis.curves} height={320} />
-              {survival_analysis.logrank && (
-                <p className={s.detailsKMNote}>
-                  Log-rank: χ² = {survival_analysis.logrank.statistic},
-                  {' '}p-value = {survival_analysis.logrank.p_value < 0.001 ? '<0.001' : survival_analysis.logrank.p_value.toFixed(3)}
-                </p>
-              )}
-            </div>
-          ) : (
-            <Empty title="Анализ выживаемости недоступен" description={survival_analysis.reason} />
-          )}
-
-          <details className={s.subDetails}>
-            <summary className={s.subDetailsSummary}>
-              Полный список клиентов с риском ({clients.length})
-            </summary>
-            <ul className={s.fullClientList}>
-              {clients.map(c => (
-                <li
-                  key={c.client_id}
-                  className={s.fullClientRow}
-                  onClick={() => navigate(`/clients/${c.client_id}`)}
-                >
-                  <div className={s.fullClientName}>{c.client_name}</div>
-                  <div className={s.fullClientMeta}>
-                    {c.subscription_type && (
-                      <span>{subscriptionLabels[c.subscription_type] ?? c.subscription_type}</span>
-                    )}
-                    <span>• сессий: {c.total_sessions}</span>
-                    <span>• последняя: {formatDate(c.last_session)}</span>
-                  </div>
-                  <span className={s.fullClientScore}>{c.risk.score.toFixed(0)}</span>
-                  <Badge variant={
-                    c.risk.level === 'high' ? 'danger' :
-                    c.risk.level === 'medium' ? 'warning' : 'success'
-                  } size="sm">
-                    {riskWord(c.risk.level)}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </div>
-      </details>
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Dumbbell, Target, ClipboardList,
   TrendingDown, Component as Cluster, BarChart3, Lightbulb,
-  ShieldCheck, LogOut, Activity, Shield, UserCheck, User, UsersRound,
+  LogOut, Activity, Shield, UserCheck, User, UsersRound,
+  Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { authStore } from '@/stores';
@@ -27,8 +28,8 @@ const ALL_NAV: NavItem[] = [
   { id: 'churn',              path: '/churn',              label: 'Анализ оттока',     icon: TrendingDown,    section: 'analytics' },
   { id: 'segments',           path: '/segments',           label: 'Сегменты',          icon: Cluster,         section: 'analytics' },
   { id: 'programs-analytics', path: '/programs-analytics', label: 'Сравнение программ', icon: BarChart3,      section: 'analytics' },
+  { id: 'gym-load',           path: '/gym-load',           label: 'Загруженность',     icon: Building2,       section: 'analytics' },
   { id: 'recommendations',    path: '/recommendations',    label: 'Рекомендации',      icon: Lightbulb,       section: 'analytics' },
-  { id: 'access',             path: '/access',             label: 'Права доступа',     icon: ShieldCheck,     section: 'system' },
   { id: 'trainers-accounts',  path: '/trainers-accounts',  label: 'Аккаунты тренеров', icon: UsersRound,      section: 'system' },
 ];
 

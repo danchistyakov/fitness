@@ -5,7 +5,7 @@ ORM-модели SQLAlchemy для информационной системы �
 
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Date, DateTime, ForeignKey, Boolean,
+    Column, Integer, String, Text, Float, Date, Time, DateTime, ForeignKey, Boolean, CheckConstraint,
     func,
 )
 from sqlalchemy.orm import relationship
@@ -29,7 +29,7 @@ class Client(Base):
     fitness_level = Column(String, default="beginner")
     health_notes = Column(Text)
     contraindications = Column(Text)
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
 
     # Дополнительные поля, требуемые ВКР
     height = Column(Float)                       # рост (см)
@@ -50,7 +50,7 @@ class Trainer(Base):
     specialization = Column(String)
     experience_years = Column(Integer)
     rating = Column(Float, default=4.5)
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
 
     clients = relationship("Client", back_populates="trainer")
     programs = relationship("TrainingProgram", back_populates="trainer")
@@ -88,7 +88,7 @@ class TrainingProgram(Base):
     difficulty_level = Column(String, default="medium")
     start_date = Column(Date)                    # дата начала программы
     created_at = Column(DateTime, default=func.current_timestamp())
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
 
     client = relationship("Client", back_populates="programs")
     trainer = relationship("Trainer", back_populates="programs")
@@ -122,12 +122,11 @@ class TrainingSession(Base):
     program_id = Column(Integer, ForeignKey("training_programs.id"))
     trainer_id = Column(Integer, ForeignKey("trainers.id"))
     session_date = Column(Date, nullable=False)
-    start_time = Column(String)
+    start_time = Column(Time)  # SQLite хранит TIME как TEXT в формате HH:MM:SS
     duration_minutes = Column(Integer)
     calories_burned = Column(Integer)
-    avg_heart_rate = Column(Integer)
-    fatigue_level = Column(Integer)
-    satisfaction_rating = Column(Integer)
+    fatigue_level = Column(Integer, CheckConstraint("fatigue_level BETWEEN 1 AND 10"))
+    satisfaction_rating = Column(Integer, CheckConstraint("satisfaction_rating BETWEEN 1 AND 5"))
     comment = Column(Text)
 
     client = relationship("Client", back_populates="sessions")
@@ -147,7 +146,7 @@ class SessionExercise(Base):
     actual_reps = Column(Integer)
     actual_weight = Column(Float)
     actual_duration_seconds = Column(Integer)
-    rpe = Column(Integer)
+    rpe = Column(Integer, CheckConstraint("rpe BETWEEN 1 AND 10"))
     calories_burned = Column(Integer)
 
     session = relationship("TrainingSession", back_populates="exercises")
@@ -185,6 +184,7 @@ class ClientGoal(Base):
     metric = Column(String, nullable=False)
     target_value = Column(Float)
     target_date = Column(Date)
+    status = Column(String, default="pending")
     created_at = Column(DateTime, default=func.current_timestamp())
     achieved_at = Column(DateTime)
 
@@ -202,7 +202,7 @@ class Recommendation(Base):
     description = Column(Text)
     priority = Column(Integer, default=5)
     created_at = Column(DateTime, default=func.current_timestamp())
-    is_applied = Column(Integer, default=0)
+    is_applied = Column(Boolean, default=False)
 
 
 class User(Base):
@@ -215,20 +215,8 @@ class User(Base):
     full_name = Column(String, nullable=False)
     trainer_id = Column(Integer, ForeignKey("trainers.id"))
     client_id = Column(Integer, ForeignKey("clients.id"))
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.current_timestamp())
-
-
-class AuditLog(Base):
-    __tablename__ = "audit_log"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    action = Column(String, nullable=False)
-    entity_type = Column(String)
-    entity_id = Column(Integer)
-    timestamp = Column(DateTime, default=func.current_timestamp())
-    ip_address = Column(String)
 
 
 class TrainingCalendar(Base):
@@ -240,3 +228,4 @@ class TrainingCalendar(Base):
     planned_date = Column(Date, nullable=False)
     day_of_week = Column(Integer)
     status = Column(String, default="planned")  # planned, completed, skipped
+

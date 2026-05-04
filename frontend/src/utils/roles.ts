@@ -4,14 +4,14 @@ import type { UserRole } from '@/types/api';
 export const ROLE_PAGES: Record<UserRole, string[]> = {
   admin: [
     'dashboard', 'clients', 'exercises', 'programs', 'sessions',
-    'churn', 'segments', 'programs-analytics', 'recommendations', 'access',
+    'churn', 'segments', 'programs-analytics', 'gym-load', 'recommendations',
     'trainers-accounts',
   ],
   trainer: [
     'dashboard', 'clients', 'exercises', 'programs', 'sessions',
-    'churn', 'recommendations',
+    'churn', 'segments', 'programs-analytics', 'gym-load', 'recommendations',
   ],
-  client: ['dashboard', 'programs'],
+  client: ['dashboard', 'clients', 'programs', 'sessions'],
 };
 
 // Заголовки страниц для мобильного хедера. Порядок важен — длинные префиксы первее.
@@ -23,8 +23,8 @@ export const ROUTE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/sessions',           'Тренировки'],
   ['/churn',              'Анализ оттока'],
   ['/segments',           'Сегменты'],
+  ['/gym-load',           'Загруженность'],
   ['/recommendations',    'Рекомендации'],
   ['/trainers-accounts',  'Аккаунты тренеров'],
-  ['/access',             'Права доступа'],
   ['/',                   'Дашборд'],
 ];

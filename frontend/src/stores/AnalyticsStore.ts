@@ -6,6 +6,7 @@ import type {
   ProgramsAnalyticsData,
   ProgramsMetric,
   SegmentsData,
+  GymLoadData,
 } from '@/types/api';
 import { toastStore } from './ToastStore';
 
@@ -24,12 +25,16 @@ class AnalyticsStore {
   clientAnalytics: ClientAnalytics | null = null;
   isLoadingClient = false;
 
+  gymLoad: GymLoadData | null = null;
+  isLoadingGymLoad = false;
+
   constructor() {
     makeAutoObservable(this, {
       churn: observable.ref,
       segments: observable.ref,
       programs: observable.ref,
       clientAnalytics: observable.ref,
+      gymLoad: observable.ref,
     });
   }
 
@@ -97,6 +102,19 @@ class AnalyticsStore {
       runInAction(() => { this.clientAnalytics = null; });
     } finally {
       runInAction(() => { this.isLoadingClient = false; });
+    }
+  }
+
+  async loadGymLoad() {
+    this.isLoadingGymLoad = true;
+    try {
+      const data = await api.get<GymLoadData>('/analytics/gym-load');
+      runInAction(() => { this.gymLoad = data; });
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки загруженности зала';
+      toastStore.add(message, 'error');
+    } finally {
+      runInAction(() => { this.isLoadingGymLoad = false; });
     }
   }
 }
