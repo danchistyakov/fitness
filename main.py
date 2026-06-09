@@ -17,7 +17,6 @@ import math
 import os
 import random
 import secrets
-import sqlite3
 
 from sqlalchemy import select, insert, update, delete, func, text
 from sqlalchemy.orm import Session
@@ -47,9 +46,12 @@ app = FastAPI(
     version="2.0.0",
 )
 
+_cors_origins = os.getenv("CORS_ORIGINS", "*")
+allow_origins = [o.strip() for o in _cors_origins.split(",")] if _cors_origins else []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, AlertTriangle, ChevronRight,
 } from 'lucide-react';
-import { clientsStore } from '@/stores';
+import { clientsStore, authStore } from '@/stores';
 import type { Client, ClientCreate } from '@/types/api';
 import { Page } from '@/components/Page';
 import { Card } from '@/components/Card';
@@ -22,6 +22,7 @@ import s from './Clients.module.scss';
 const Clients = observer(() => {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const isAdmin = authStore.role === 'admin';
 
   useEffect(() => {
     clientsStore.load();
@@ -92,15 +93,15 @@ const Clients = observer(() => {
   return (
     <Page
       title="Клиенты"
-      subtitle={`Всего: ${clientsStore.total}`}
-      actions={
+      subtitle={`Всего: ${clientsStore.total} шт.`}
+      actions={isAdmin && (
         <Button
           iconLeft={<Plus size={14} />}
           onClick={() => setCreating(true)}
         >
           Добавить клиента
         </Button>
-      }
+      )}
     >
       <Card padding="compact">
         <div className={s.filters}>
@@ -164,6 +165,20 @@ function ClientCreateModal({ open, onClose }: CreateModalProps) {
     fitness_level: 'beginner',
     health_notes: '',
     contraindications: '',
+    height: null,
+    weight: null,
+    body_fat_percentage: null,
+    muscle_mass: null,
+    chest_cm: null,
+    waist_cm: null,
+    hips_cm: null,
+    biceps_cm: null,
+    thighs_cm: null,
+    resting_heart_rate: null,
+    max_pushups: null,
+    max_pullups: null,
+    plank_seconds: null,
+    run_5km_minutes: null,
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -182,6 +197,7 @@ function ClientCreateModal({ open, onClose }: CreateModalProps) {
       fitness_goal: form.fitness_goal || null,
       health_notes: form.health_notes || null,
       contraindications: form.contraindications || null,
+      phone: form.phone || null,
     });
     setSubmitting(false);
     if (id !== null) {
@@ -191,6 +207,10 @@ function ClientCreateModal({ open, onClose }: CreateModalProps) {
         subscription_type: 'basic', subscription_start_date: '',
         fitness_goal: '', fitness_level: 'beginner',
         health_notes: '', contraindications: '',
+        height: null, weight: null, body_fat_percentage: null, muscle_mass: null,
+        chest_cm: null, waist_cm: null, hips_cm: null, biceps_cm: null, thighs_cm: null,
+        resting_heart_rate: null, max_pushups: null, max_pullups: null,
+        plank_seconds: null, run_5km_minutes: null,
       });
     }
   };
@@ -258,6 +278,52 @@ function ClientCreateModal({ open, onClose }: CreateModalProps) {
               <option value="flexibility">Гибкость</option>
               <option value="general_fitness">Общая форма</option>
             </Select>
+          </Field>
+        </div>
+
+        <div className={s.sectionTitle}>Первичные замеры</div>
+        <div className={s.formGrid}>
+          <Field label="Рост (см)">
+            <Input type="number" value={form.height ?? ''} onChange={e => update('height', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Вес (кг)">
+            <Input type="number" step="0.1" value={form.weight ?? ''} onChange={e => update('weight', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="% жировой ткани">
+            <Input type="number" step="0.1" value={form.body_fat_percentage ?? ''} onChange={e => update('body_fat_percentage', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Мышечная масса (кг)">
+            <Input type="number" step="0.1" value={form.muscle_mass ?? ''} onChange={e => update('muscle_mass', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Обхват груди (см)">
+            <Input type="number" step="0.1" value={form.chest_cm ?? ''} onChange={e => update('chest_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Обхват талии (см)">
+            <Input type="number" step="0.1" value={form.waist_cm ?? ''} onChange={e => update('waist_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Обхват бёдер (см)">
+            <Input type="number" step="0.1" value={form.hips_cm ?? ''} onChange={e => update('hips_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Обхват бицепса (см)">
+            <Input type="number" step="0.1" value={form.biceps_cm ?? ''} onChange={e => update('biceps_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Обхват бедра (см)">
+            <Input type="number" step="0.1" value={form.thighs_cm ?? ''} onChange={e => update('thighs_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Пульс в покое">
+            <Input type="number" value={form.resting_heart_rate ?? ''} onChange={e => update('resting_heart_rate', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Отжимания (макс)">
+            <Input type="number" value={form.max_pushups ?? ''} onChange={e => update('max_pushups', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Подтягивания (макс)">
+            <Input type="number" value={form.max_pullups ?? ''} onChange={e => update('max_pullups', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Планка (сек)">
+            <Input type="number" value={form.plank_seconds ?? ''} onChange={e => update('plank_seconds', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Бег 5 км (мин)">
+            <Input type="number" step="0.1" value={form.run_5km_minutes ?? ''} onChange={e => update('run_5km_minutes', e.target.value ? Number(e.target.value) : null)} />
           </Field>
         </div>
 

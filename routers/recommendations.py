@@ -1,92 +1,90 @@
-from typing import Optional, List
 from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db_raw,
     get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
+    DAY_NAMES,
+    sql_date_sub, sql_dow, sql_bool_true, sql_bool_false,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
 
 router = APIRouter()
 
 # ==================== Recommendations ====================
 
 def _recompute_recommendations(conn) -> int:
-    conn.execute("DELETE FROM recommendations WHERE is_applied = 0")
-    rows = conn.execute(
-        """
+    conn.execute(text(f"DELETE FROM recommendations WHERE COALESCE(is_applied, {sql_bool_false()}) = {sql_bool_false()}"))
+    result = conn.execute(
+        text(f"""
         SELECT t.id, t.name, COUNT(ts.id) AS sessions
           FROM trainers t
           LEFT JOIN training_sessions ts ON t.id = ts.trainer_id
-               AND ts.session_date >= date('now', '-30 days')
-         WHERE t.is_active = 1
+               AND ts.session_date >= {sql_date_sub(30)}
+         WHERE t.is_active = {sql_bool_true()}
          GROUP BY t.id
-        """
-    ).fetchall()
+        """)
+    )
+    rows = result.fetchall()
     for r in rows:
-        if r["sessions"] < 20:
+        if r._mapping["sessions"] < 20:
             conn.execute(
-                "INSERT INTO recommendations (recommendation_type, title, description, priority) VALUES (?, ?, ?, ?)",
-                (
-                    "trainer_load",
-                    f"Низкая загрузка тренера {r['name']}",
-                    f"За последние 30 дней проведено {r['sessions']} сессий (менее 20). Рекомендуется перераспределить клиентов.",
-                    8,
-                ),
+                text("""
+                INSERT INTO recommendations (trainer_id, recommendation_type, title, description, priority)
+                VALUES (:trainer_id, :recommendation_type, :title, :description, :priority)
+                """),
+                {
+                    "trainer_id": r._mapping["id"],
+                    "recommendation_type": "trainer_load",
+                    "title": f"Низкая загрузка тренера {r._mapping['name']}",
+                    "description": f"За последние 30 дней проведено {r._mapping['sessions']} сессий (менее 20). Рекомендуется перераспределить клиентов.",
+                    "priority": 8,
+                },
             )
-        elif r["sessions"] > 40:
+        elif r._mapping["sessions"] > 40:
             conn.execute(
-                "INSERT INTO recommendations (recommendation_type, title, description, priority) VALUES (?, ?, ?, ?)",
-                (
-                    "trainer_overload",
-                    f"Высокая загрузка тренера {r['name']}",
-                    f"За последние 30 дней проведено {r['sessions']} сессий (более 40). Рекомендуется перераспределить часть клиентов.",
-                    7,
-                ),
+                text("""
+                INSERT INTO recommendations (trainer_id, recommendation_type, title, description, priority)
+                VALUES (:trainer_id, :recommendation_type, :title, :description, :priority)
+                """),
+                {
+                    "trainer_id": r._mapping["id"],
+                    "recommendation_type": "trainer_overload",
+                    "title": f"Высокая загрузка тренера {r._mapping['name']}",
+                    "description": f"За последние 30 дней проведено {r._mapping['sessions']} сессий (более 40). Рекомендуется перераспределить часть клиентов.",
+                    "priority": 7,
+                },
             )
-    rows = conn.execute(
-        """
-        SELECT strftime('%w', session_date) AS dow, COUNT(*) AS cnt
+    result = conn.execute(
+        text(f"""
+        SELECT {sql_dow('session_date')} AS dow, COUNT(*) AS cnt
           FROM training_sessions
-         WHERE session_date >= date('now', '-30 days')
-         GROUP BY dow
-        """
-    ).fetchall()
-    counts = {int(r["dow"]): r["cnt"] for r in rows}
+         WHERE session_date >= {sql_date_sub(30)}
+         GROUP BY {sql_dow('session_date')}
+        """)
+    )
+    rows = result.fetchall()
+    counts = {int(r._mapping["dow"]): r._mapping["cnt"] for r in rows}
     if counts:
         avg = sum(counts.values()) / 7
         weak_days = [DAY_NAMES[d] for d in range(7) if counts.get(d, 0) < avg * 0.7]
         if weak_days and avg > 0:
             conn.execute(
-                "INSERT INTO recommendations (recommendation_type, title, description, priority) VALUES (?, ?, ?, ?)",
-                (
-                    "weekday_load",
-                    "Неравномерная посещаемость по дням недели",
-                    f"Просадка посещений в дни: {', '.join(weak_days)}. Рекомендуется выровнять расписание или ввести стимулирующие акции.",
-                    6,
-                ),
+                text("""
+                INSERT INTO recommendations (recommendation_type, title, description, priority)
+                VALUES (:recommendation_type, :title, :description, :priority)
+                """),
+                {
+                    "recommendation_type": "weekday_load",
+                    "title": "Неравномерная посещаемость по дням недели",
+                    "description": f"Просадка посещений в дни: {', '.join(weak_days)}. Рекомендуется выровнять расписание или ввести стимулирующие акции.",
+                    "priority": 6,
+                },
             )
-    return conn.execute("SELECT COUNT(*) FROM recommendations WHERE is_applied = 0").fetchone()[0]
+    result = conn.execute(text(f"SELECT COUNT(*) FROM recommendations WHERE COALESCE(is_applied, {sql_bool_false()}) = {sql_bool_false()}"))
+    row = result.fetchone()
+    return row[0]
 
 
 @router.post("/api/recommendations/recompute")
@@ -107,9 +105,11 @@ async def list_recommendations(
     with get_db_raw() as conn:
         q = "SELECT * FROM recommendations"
         if not include_applied:
-            q += " WHERE is_applied = 0"
+            q += f" WHERE COALESCE(is_applied, {sql_bool_false()}) = {sql_bool_false()}"
         q += " ORDER BY priority DESC, created_at DESC"
-        return [dict(r) for r in conn.execute(q).fetchall()]
+        result = conn.execute(text(q))
+        rows = result.fetchall()
+        return [dict(r._mapping) for r in rows]
 
 
 @router.post("/api/recommendations/{rec_id}/apply")
@@ -118,8 +118,6 @@ async def apply_recommendation(
     user: dict = Depends(require_roles("admin")),
 ):
     with get_db_raw() as conn:
-        conn.execute("UPDATE recommendations SET is_applied = 1 WHERE id = ?", (rec_id,))
+        conn.execute(text(f"UPDATE recommendations SET is_applied = {sql_bool_true()} WHERE id = :rec_id"), {"rec_id": rec_id})
         conn.commit()
     return {"ok": True}
-
-

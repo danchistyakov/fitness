@@ -1,31 +1,18 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
-import math
-import os
-import random
 import secrets
-import sqlite3
+from datetime import datetime, timedelta
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import Field, BaseModel
+from sqlalchemy import select, update, func
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db, orm_to_dict,
     get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
+    _hash_password,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
+from schemas import TrainerCreate
+from models import Trainer, TrainingSession, User
 
 router = APIRouter()
 
@@ -57,20 +44,26 @@ async def create_trainer(
         session.commit()
         session.refresh(db_trainer)
         trainer_id = db_trainer.id
-        # Автоматическое создание учётной записи
-        login = f"trainer{trainer_id:02d}"
+
+        # Автоматическая генерация учётной записи тренера
+        login = trainer.login or f"trainer{trainer_id:02d}"
         existing_user = session.execute(select(User).where(User.login == login)).scalar_one_or_none()
-        if not existing_user:
-            user_record = User(
-                login=login,
-                password_hash=_hash_password(login),
-                role="trainer",
-                full_name=db_trainer.name,
-                trainer_id=trainer_id,
-            )
-            session.add(user_record)
-            session.commit()
-    return {"id": trainer_id, "message": "Trainer created", "login": login}
+        if existing_user:
+            login = f"trainer{trainer_id:02d}_{secrets.token_hex(2)}"
+
+        password = trainer.password or secrets.token_urlsafe(8)
+        db_user = User(
+            login=login,
+            password_hash=_hash_password(password),
+            role="trainer",
+            full_name=trainer.name,
+            trainer_id=trainer_id,
+            is_active=True,
+        )
+        session.add(db_user)
+        session.commit()
+
+    return {"id": trainer_id, "login": login, "password": password, "message": "Trainer created"}
 
 
 @router.put("/api/trainers/{trainer_id}")
@@ -97,5 +90,42 @@ async def delete_trainer(
         session.execute(update(Trainer).where(Trainer.id == trainer_id).values(is_active=False))
         session.commit()
     return {"message": "Trainer deactivated"}
+
+
+def _recalculate_trainer_rating(session, trainer_id: int) -> float:
+    """Пересчитывает рейтинг тренера на основании средней оценки
+    удовлетворённости клиентов за последние 90 дней."""
+    from sqlalchemy import func
+    from models import TrainingSession
+    cutoff = (datetime.now() - timedelta(days=90)).date()
+    avg_sat = session.execute(
+        func.avg(TrainingSession.satisfaction_rating)
+        .where(
+            TrainingSession.trainer_id == trainer_id,
+            TrainingSession.satisfaction_rating.isnot(None),
+            TrainingSession.session_date >= cutoff,
+        )
+    ).scalar()
+    if avg_sat is not None:
+        new_rating = round(float(avg_sat), 2)
+        session.execute(
+            update(Trainer).where(Trainer.id == trainer_id).values(rating=new_rating)
+        )
+        session.commit()
+        return new_rating
+    return 0.0
+
+
+@router.post("/api/trainers/{trainer_id}/recalculate-rating")
+async def recalculate_trainer_rating(
+    trainer_id: int,
+    user: dict = Depends(require_roles("admin")),
+):
+    with get_db() as session:
+        trainer = session.execute(select(Trainer).where(Trainer.id == trainer_id)).scalar_one_or_none()
+        if not trainer:
+            raise HTTPException(status_code=404, detail="Trainer not found")
+        new_rating = _recalculate_trainer_rating(session, trainer_id)
+    return {"trainer_id": trainer_id, "new_rating": new_rating}
 
 

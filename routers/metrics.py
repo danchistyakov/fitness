@@ -1,31 +1,15 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update, delete
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db, orm_to_dict,
     get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
+    _check_trainer_owns_client,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
+from schemas import ClientMetricsCreate
+from models import ClientMetric
 
 router = APIRouter()
 
@@ -80,5 +64,41 @@ async def create_metrics(
         session.commit()
         session.refresh(metric)
     return {"id": metric.id}
+
+
+@router.put("/api/metrics/{metric_id}")
+async def update_metrics(
+    metric_id: int,
+    m: ClientMetricsCreate,
+    user: dict = Depends(require_roles("admin", "trainer")),
+):
+    fields = m.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    with get_db() as session:
+        existing = session.execute(select(ClientMetric).where(ClientMetric.id == metric_id)).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Metric not found")
+        if user["role"] == "trainer" and not _check_trainer_owns_client(session, user.get("trainer_id"), existing.client_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        session.execute(update(ClientMetric).where(ClientMetric.id == metric_id).values(**fields))
+        session.commit()
+    return {"message": "Metric updated"}
+
+
+@router.delete("/api/metrics/{metric_id}")
+async def delete_metrics(
+    metric_id: int,
+    user: dict = Depends(require_roles("admin", "trainer")),
+):
+    with get_db() as session:
+        existing = session.execute(select(ClientMetric).where(ClientMetric.id == metric_id)).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Metric not found")
+        if user["role"] == "trainer" and not _check_trainer_owns_client(session, user.get("trainer_id"), existing.client_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        session.execute(delete(ClientMetric).where(ClientMetric.id == metric_id))
+        session.commit()
+    return {"message": "Metric deleted"}
 
 

@@ -1,31 +1,16 @@
-from typing import Optional, List
 from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update, delete, text
 
-from db import engine, SessionLocal
 from dependencies import (
     get_db, get_db_raw, orm_to_dict,
     get_current_user, require_roles,
     _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
+from schemas import TrainingProgramCreate, TrainingProgramUpdate, ProgramExerciseCreate
+from models import Client, Trainer, Exercise, TrainingProgram, ProgramExercise, TrainingCalendar
 
 router = APIRouter()
 
@@ -150,11 +135,13 @@ async def copy_program(
                 raise HTTPException(status_code=403, detail="Недостаточно прав")
             if not _check_trainer_owns_client(session, user.get("trainer_id"), target_client_id):
                 raise HTTPException(status_code=403, detail="Недостаточно прав")
-        session.execute(
-            update(TrainingProgram)
-            .where(TrainingProgram.client_id == target_client_id, TrainingProgram.is_active.is_(True))
-            .values(is_active=False)
-        )
+        # Архивируем исходную программу только при смене цикла для того же клиента (согласно ВКР)
+        if target_client_id == src.client_id:
+            session.execute(
+                update(TrainingProgram)
+                .where(TrainingProgram.id == program_id)
+                .values(is_active=False)
+            )
         new_trainer_id = src.trainer_id
         if user["role"] == "trainer":
             new_trainer_id = user.get("trainer_id")
@@ -267,27 +254,71 @@ async def add_program_exercise(
     return {"id": exercise.id}
 
 
+@router.put("/api/programs/{program_id}/exercises/{pe_id}")
+async def update_program_exercise(
+    program_id: int,
+    pe_id: int,
+    pe: ProgramExerciseCreate,
+    user: dict = Depends(require_roles("admin", "trainer")),
+):
+    fields = pe.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    fields.pop("program_id", None)
+    with get_db() as session:
+        if user["role"] == "trainer" and not _check_trainer_owns_program(session, user.get("trainer_id"), program_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        existing = session.execute(
+            select(ProgramExercise).where(ProgramExercise.id == pe_id, ProgramExercise.program_id == program_id)
+        ).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Exercise not found in program")
+        session.execute(update(ProgramExercise).where(ProgramExercise.id == pe_id).values(**fields))
+        session.commit()
+    return {"message": "Program exercise updated"}
+
+
+@router.delete("/api/programs/{program_id}/exercises/{pe_id}")
+async def delete_program_exercise(
+    program_id: int,
+    pe_id: int,
+    user: dict = Depends(require_roles("admin", "trainer")),
+):
+    with get_db() as session:
+        if user["role"] == "trainer" and not _check_trainer_owns_program(session, user.get("trainer_id"), program_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        existing = session.execute(
+            select(ProgramExercise).where(ProgramExercise.id == pe_id, ProgramExercise.program_id == program_id)
+        ).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Exercise not found in program")
+        session.execute(delete(ProgramExercise).where(ProgramExercise.id == pe_id))
+        session.commit()
+    return {"message": "Program exercise deleted"}
+
+
 @router.get("/api/programs/{program_id}/calendar")
 async def get_program_calendar(
     program_id: int,
     user: dict = Depends(get_current_user),
 ):
     with get_db_raw() as conn:
-        program = conn.execute(
-            "SELECT * FROM training_programs WHERE id = ?", (program_id,)
-        ).fetchone()
+        result = conn.execute(
+            text("SELECT * FROM training_programs WHERE id = :program_id"),
+            {"program_id": program_id},
+        )
+        program = result.fetchone()
         if not program:
             raise HTTPException(status_code=404, detail="Program not found")
-        if user["role"] == "client" and user.get("client_id") != program["client_id"]:
+        if user["role"] == "client" and user.get("client_id") != program._mapping["client_id"]:
             raise HTTPException(status_code=403, detail="Недостаточно прав")
-        rows = conn.execute(
-            """
+        result = conn.execute(
+            text("""
             SELECT * FROM training_calendar
-             WHERE program_id = ?
+             WHERE program_id = :program_id
              ORDER BY planned_date
-            """,
-            (program_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
+            """),
+            {"program_id": program_id},
+        )
+        rows = result.fetchall()
+        return [dict(r._mapping) for r in rows]

@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { api, ApiError } from '@/utils/api';
-import type { ClientMetrics, ClientMetricsCreate, CreateResponse } from '@/types/api';
+import type { ClientMetrics, ClientMetricsCreate, ClientMetricsUpdate, CreateResponse } from '@/types/api';
 import { toastStore } from './ToastStore';
 
 class MetricsStore {
@@ -36,6 +36,32 @@ class MetricsStore {
       const message = e instanceof ApiError ? e.detail : 'Ошибка добавления';
       toastStore.add(message, 'error');
       return null;
+    }
+  }
+
+  async update(metricId: number, payload: ClientMetricsUpdate): Promise<boolean> {
+    try {
+      await api.put(`/metrics/${metricId}`, payload);
+      toastStore.add('Замер обновлён', 'success');
+      if (this.clientId) await this.load(this.clientId);
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка обновления';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async delete(metricId: number): Promise<boolean> {
+    try {
+      await api.delete(`/metrics/${metricId}`);
+      toastStore.add('Замер удалён', 'success');
+      if (this.clientId) await this.load(this.clientId);
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка удаления';
+      toastStore.add(message, 'error');
+      return false;
     }
   }
 }

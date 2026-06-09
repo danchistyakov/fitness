@@ -1,29 +1,14 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
-    get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
-)
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
+    get_db_raw, get_current_user, require_roles, DAY_NAMES,
+    sql_date_sub, sql_dow, sql_year_week, sql_year_month, sql_hour,
+    sql_group_concat, sql_bool_true, sql_bool_false,
 )
 import numpy as np
 
@@ -34,88 +19,186 @@ router = APIRouter()
 @router.get("/api/analytics/dashboard")
 async def get_dashboard_analytics(user: dict = Depends(get_current_user)):
     with get_db_raw() as conn:
-        c = conn.cursor()
         trainer_id = user.get("trainer_id") if user["role"] == "trainer" else None
+        client_id = user.get("client_id") if user["role"] == "client" else None
+
+        # --- Клиент: только персональные данные ---
+        if client_id:
+            result = conn.execute(
+                text(f"SELECT COUNT(*) FROM clients WHERE is_active = {sql_bool_true()} AND id = :client_id"),
+                {"client_id": client_id},
+            )
+            active_clients = result.fetchone()[0]
+            result = conn.execute(
+                text(
+                    f"SELECT COUNT(*) FROM trainers WHERE is_active = {sql_bool_true()} AND id = (SELECT trainer_id FROM clients WHERE id = :client_id)"
+                ),
+                {"client_id": client_id},
+            )
+            active_trainers = result.fetchone()[0]
+            result = conn.execute(
+                text(f"SELECT COUNT(*) FROM training_programs WHERE is_active = {sql_bool_true()} AND client_id = :client_id"),
+                {"client_id": client_id},
+            )
+            active_programs = result.fetchone()[0]
+            result = conn.execute(
+                text(
+                    f"SELECT COUNT(*) FROM training_sessions WHERE session_date >= {sql_date_sub(30)} AND client_id = :client_id"
+                ),
+                {"client_id": client_id},
+            )
+            sessions_30d = result.fetchone()[0]
+            result = conn.execute(
+                text(
+                    f"SELECT AVG(satisfaction_rating) FROM training_sessions WHERE satisfaction_rating IS NOT NULL AND session_date >= {sql_date_sub(30)} AND client_id = :client_id"
+                ),
+                {"client_id": client_id},
+            )
+            avg_satisfaction = result.fetchone()[0] or 0
+
+            result = conn.execute(
+                text(
+                    f"SELECT {sql_dow('session_date')} AS dow, COUNT(*) AS cnt FROM training_sessions WHERE session_date >= {sql_date_sub(30)} AND client_id = :client_id GROUP BY dow"
+                ),
+                {"client_id": client_id},
+            )
+            by_dow = {int(r[0]): r[1] for r in result.fetchall()}
+            visits_by_weekday = [{"day": DAY_NAMES[i], "visits": by_dow.get(i, 0)} for i in range(7)]
+
+            result = conn.execute(
+                text(
+                    f"SELECT COALESCE(fitness_goal, 'не указано') AS goal, COUNT(*) AS cnt FROM clients WHERE is_active = {sql_bool_true()} AND id = :client_id GROUP BY goal"
+                ),
+                {"client_id": client_id},
+            )
+            goal_distribution = [{"goal": r[0], "count": r[1]} for r in result.fetchall()]
+
+            result = conn.execute(
+                text(f"""
+                SELECT t.name, COUNT(ts.id) AS sessions, COALESCE(AVG(ts.satisfaction_rating), 0) AS rating
+                  FROM trainers t
+                  LEFT JOIN training_sessions ts ON t.id = ts.trainer_id AND ts.session_date >= {sql_date_sub(90)}
+                 WHERE t.is_active = {sql_bool_true()} AND t.id = (SELECT trainer_id FROM clients WHERE id = :client_id)
+                 GROUP BY t.id
+                """),
+                {"client_id": client_id},
+            )
+            top_trainers = [
+                {"name": r[0], "sessions": r[1], "rating": round(r[2], 2)}
+                for r in result.fetchall()
+            ]
+
+            result = conn.execute(
+                text(
+                    f"SELECT {sql_year_week('session_date')} AS week, COUNT(*) AS cnt FROM training_sessions WHERE session_date >= {sql_date_sub(84)} AND client_id = :client_id GROUP BY week ORDER BY week"
+                ),
+                {"client_id": client_id},
+            )
+            weekly_visits = [{"week": r[0], "visits": r[1]} for r in result.fetchall()]
+
+            return {
+                "summary": {
+                    "active_clients": active_clients,
+                    "active_trainers": active_trainers,
+                    "active_programs": active_programs,
+                    "sessions_30d": sessions_30d,
+                    "avg_satisfaction": round(avg_satisfaction, 2),
+                },
+                "visits_by_weekday": visits_by_weekday,
+                "goal_distribution": goal_distribution,
+                "top_trainers": top_trainers,
+                "weekly_visits": weekly_visits,
+            }
+
+        # --- Тренер и администратор (общая логика с фильтрацией) ---
         client_subquery = ""
         if trainer_id:
             client_subquery = f" AND client_id IN (SELECT id FROM clients WHERE trainer_id = {trainer_id})"
 
-        c.execute(f"SELECT COUNT(*) FROM clients WHERE is_active = 1" + (f" AND trainer_id = {trainer_id}" if trainer_id else ""))
-        active_clients = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM trainers WHERE is_active = 1")
-        active_trainers = c.fetchone()[0]
-        c.execute(f"SELECT COUNT(*) FROM training_programs WHERE is_active = 1" + (client_subquery.replace("client_id", "client_id") if trainer_id else ""))
-        active_programs = c.fetchone()[0]
-        c.execute(
-            f"SELECT COUNT(*) FROM training_sessions"
-            f" WHERE session_date >= date('now', '-30 days'){client_subquery}"
+        result = conn.execute(text(f"SELECT COUNT(*) FROM clients WHERE is_active = {sql_bool_true()}" + (f" AND trainer_id = {trainer_id}" if trainer_id else "")))
+        active_clients = result.fetchone()[0]
+        result = conn.execute(text(f"SELECT COUNT(*) FROM trainers WHERE is_active = {sql_bool_true()}"))
+        active_trainers = result.fetchone()[0]
+        result = conn.execute(text(f"SELECT COUNT(*) FROM training_programs WHERE is_active = {sql_bool_true()}" + (client_subquery.replace("client_id", "client_id") if trainer_id else "")))
+        active_programs = result.fetchone()[0]
+        result = conn.execute(
+            text(
+                f"SELECT COUNT(*) FROM training_sessions"
+                f" WHERE session_date >= {sql_date_sub(30)}{client_subquery}"
+            )
         )
-        sessions_30d = c.fetchone()[0]
-        c.execute(
-            f"SELECT AVG(satisfaction_rating) FROM training_sessions"
-            f" WHERE satisfaction_rating IS NOT NULL"
-            f" AND session_date >= date('now', '-30 days'){client_subquery}"
+        sessions_30d = result.fetchone()[0]
+        result = conn.execute(
+            text(
+                f"SELECT AVG(satisfaction_rating) FROM training_sessions"
+                f" WHERE satisfaction_rating IS NOT NULL"
+                f" AND session_date >= {sql_date_sub(30)}{client_subquery}"
+            )
         )
-        avg_satisfaction = c.fetchone()[0] or 0
+        avg_satisfaction = result.fetchone()[0] or 0
 
-        c.execute(
-            f"SELECT strftime('%w', session_date) AS dow, COUNT(*) AS cnt"
-            f" FROM training_sessions"
-            f" WHERE session_date >= date('now', '-30 days'){client_subquery}"
-            f" GROUP BY dow"
+        result = conn.execute(
+            text(
+                f"SELECT {sql_dow('session_date')} AS dow, COUNT(*) AS cnt"
+                f" FROM training_sessions"
+                f" WHERE session_date >= {sql_date_sub(30)}{client_subquery}"
+                f" GROUP BY dow"
+            )
         )
-        by_dow = {int(r[0]): r[1] for r in c.fetchall()}
+        by_dow = {int(r[0]): r[1] for r in result.fetchall()}
         visits_by_weekday = [
             {"day": DAY_NAMES[i], "visits": by_dow.get(i, 0)} for i in range(7)
         ]
 
-        goal_q = "SELECT COALESCE(fitness_goal, 'не указано') AS goal, COUNT(*) AS cnt FROM clients WHERE is_active = 1"
+        goal_q = f"SELECT COALESCE(fitness_goal, 'не указано') AS goal, COUNT(*) AS cnt FROM clients WHERE is_active = {sql_bool_true()}"
         if trainer_id:
             goal_q += f" AND trainer_id = {trainer_id}"
         goal_q += " GROUP BY goal"
-        c.execute(goal_q)
-        goal_distribution = [{"goal": r[0], "count": r[1]} for r in c.fetchall()]
+        result = conn.execute(text(goal_q))
+        goal_distribution = [{"goal": r[0], "count": r[1]} for r in result.fetchall()]
 
         if trainer_id:
-            c.execute(
-                """
+            result = conn.execute(
+                text(f"""
                 SELECT t.name, COUNT(ts.id) AS sessions,
                        COALESCE(AVG(ts.satisfaction_rating), 0) AS rating
                   FROM trainers t
                   LEFT JOIN training_sessions ts ON t.id = ts.trainer_id
-                       AND ts.session_date >= date('now', '-90 days')
-                 WHERE t.is_active = 1 AND t.id = ?
+                       AND ts.session_date >= {sql_date_sub(90)}
+                 WHERE t.is_active = {sql_bool_true()} AND t.id = :trainer_id
                  GROUP BY t.id
                  ORDER BY rating DESC, sessions DESC
-                """,
-                (trainer_id,),
+                """),
+                {"trainer_id": trainer_id},
             )
         else:
-            c.execute(
-                """
+            result = conn.execute(
+                text(f"""
                 SELECT t.name, COUNT(ts.id) AS sessions,
                        COALESCE(AVG(ts.satisfaction_rating), 0) AS rating
                   FROM trainers t
                   LEFT JOIN training_sessions ts ON t.id = ts.trainer_id
-                       AND ts.session_date >= date('now', '-90 days')
-                 WHERE t.is_active = 1
+                       AND ts.session_date >= {sql_date_sub(90)}
+                 WHERE t.is_active = {sql_bool_true()}
                  GROUP BY t.id
                  ORDER BY rating DESC, sessions DESC
                  LIMIT 5
-                """
+                """)
             )
         top_trainers = [
             {"name": r[0], "sessions": r[1], "rating": round(r[2], 2)}
-            for r in c.fetchall()
+            for r in result.fetchall()
         ]
 
-        c.execute(
-            f"SELECT strftime('%Y-%W', session_date) AS week, COUNT(*) AS cnt"
-            f" FROM training_sessions"
-            f" WHERE session_date >= date('now', '-84 days'){client_subquery}"
-            f" GROUP BY week ORDER BY week"
+        result = conn.execute(
+            text(
+                f"SELECT {sql_year_week('session_date')} AS week, COUNT(*) AS cnt"
+                f" FROM training_sessions"
+                f" WHERE session_date >= {sql_date_sub(84)}{client_subquery}"
+                f" GROUP BY week ORDER BY week"
+            )
         )
-        weekly_visits = [{"week": r[0], "visits": r[1]} for r in c.fetchall()]
+        weekly_visits = [{"week": r[0], "visits": r[1]} for r in result.fetchall()]
 
         return {
             "summary": {
@@ -136,32 +219,28 @@ async def get_dashboard_analytics(user: dict = Depends(get_current_user)):
 
 def _client_stats(conn, client_id: int) -> dict:
     s = conn.execute(
-        "SELECT COUNT(*) AS total_sessions,"
+        text("SELECT COUNT(*) AS total_sessions,"
         " AVG(duration_minutes) AS avg_duration,"
         " AVG(satisfaction_rating) AS avg_satisfaction,"
         " MAX(session_date) AS last_session"
-        " FROM training_sessions WHERE client_id = ?",
-        (client_id,),
+        " FROM training_sessions WHERE client_id = :client_id"),
+        {"client_id": client_id},
     ).fetchone()
     recent = conn.execute(
-        "SELECT COUNT(*) FROM training_sessions WHERE client_id = ?"
-        " AND session_date >= date('now', '-30 days')",
-        (client_id,),
+        text(f"SELECT COUNT(*) FROM training_sessions WHERE client_id = :client_id"
+        f" AND session_date >= {sql_date_sub(30)}"),
+        {"client_id": client_id},
     ).fetchone()[0]
     return {
-        "total_sessions": s["total_sessions"] or 0,
-        "avg_duration": s["avg_duration"] or 0,
-        "avg_satisfaction": s["avg_satisfaction"] or 0,
-        "last_session": s["last_session"],
+        "total_sessions": (s[0] or 0) if s else 0,
+        "avg_duration": (s[1] or 0) if s else 0,
+        "avg_satisfaction": (s[2] or 0) if s else 0,
+        "last_session": s[3] if s else None,
         "sessions_30d": recent,
     }
 
 
 def calculate_churn_risk(stats: dict) -> dict:
-    """Балльная модель риска оттока, эвристический индикатор для тренера.
-
-    По ВКР: три фактора, максимум 30 + 35 + 35 = 100.
-    """
     score = 0.0
     factors: list = []
 
@@ -180,7 +259,7 @@ def calculate_churn_risk(stats: dict) -> dict:
     # Фактор 2: средняя удовлетворённость (макс. 35).
     sat = stats.get("avg_satisfaction") or 0
     if sat <= 0:
-        f2 = 17.5  # данных нет — средний риск
+        f2 = 17.5
         factors.append("Нет оценок удовлетворённости")
     else:
         f2 = max(0.0, round(35 * (5 - sat) / 4, 1))
@@ -263,16 +342,17 @@ def analyze_progress(metrics_history: list) -> dict:
 
 def goals_progress(conn, client_id: int) -> list:
     goals = conn.execute(
-        "SELECT * FROM client_goals WHERE client_id = ?", (client_id,)
+        text("SELECT * FROM client_goals WHERE client_id = :client_id"), {"client_id": client_id}
     ).fetchall()
     last_metrics = conn.execute(
-        "SELECT * FROM client_metrics WHERE client_id = ?"
-        " ORDER BY measurement_date DESC LIMIT 1",
-        (client_id,),
+        text("SELECT * FROM client_metrics WHERE client_id = :client_id"
+        " ORDER BY measurement_date DESC LIMIT 1"),
+        {"client_id": client_id},
     ).fetchone()
+    last_metrics = dict(last_metrics._mapping) if last_metrics else None
     out: list = []
     for g in goals:
-        g = dict(g)
+        g = dict(g._mapping)
         current = None
         if last_metrics and g["metric"] in last_metrics.keys():
             current = last_metrics[g["metric"]]
@@ -291,38 +371,39 @@ def goals_progress(conn, client_id: int) -> list:
 def analyze_client_programs(conn, client_id: int) -> list:
     """Аналитика по каждой программе клиента: выполнение, метрики, прогресс."""
     programs = conn.execute(
-        """
+        text("""
         SELECT tp.*, t.name AS trainer_name
           FROM training_programs tp
           LEFT JOIN trainers t ON tp.trainer_id = t.id
-         WHERE tp.client_id = ?
+         WHERE tp.client_id = :client_id
          ORDER BY tp.start_date DESC, tp.created_at DESC
-        """,
-        (client_id,),
+        """),
+        {"client_id": client_id},
     ).fetchall()
 
     results = []
     for prog in programs:
-        prog = dict(prog)
+        prog = dict(prog._mapping)
         program_id = prog["id"]
 
         # Статистика сессий по программе
         sess = conn.execute(
-            """
+            text("""
             SELECT COUNT(*) AS cnt,
                    AVG(satisfaction_rating) AS avg_sat,
                    AVG(duration_minutes) AS avg_dur,
                    SUM(calories_burned) AS total_cal
               FROM training_sessions
-             WHERE program_id = ? AND client_id = ?
-            """,
-            (program_id, client_id),
+             WHERE program_id = :program_id AND client_id = :client_id
+            """),
+            {"program_id": program_id, "client_id": client_id},
         ).fetchone()
+        sess = dict(sess._mapping) if sess else {}
 
         # Запланированные сессии
         planned_row = conn.execute(
-            "SELECT COUNT(*) FROM training_calendar WHERE program_id = ?",
-            (program_id,),
+            text("SELECT COUNT(*) FROM training_calendar WHERE program_id = :program_id"),
+            {"program_id": program_id},
         ).fetchone()
         planned = planned_row[0] if planned_row and planned_row[0] else (
             (prog.get("duration_weeks") or 0) * (prog.get("sessions_per_week") or 0)
@@ -340,26 +421,26 @@ def analyze_client_programs(conn, client_id: int) -> list:
         start_date = prog.get("start_date")
         if start_date:
             before_row = conn.execute(
-                """
+                text("""
                 SELECT * FROM client_metrics
-                 WHERE client_id = ? AND measurement_date <= ?
+                 WHERE client_id = :client_id AND measurement_date <= :start_date
                  ORDER BY measurement_date DESC LIMIT 1
-                """,
-                (client_id, start_date),
+                """),
+                {"client_id": client_id, "start_date": start_date},
             ).fetchone()
             if before_row:
-                metrics_before = dict(before_row)
+                metrics_before = dict(before_row._mapping)
 
             after_row = conn.execute(
-                """
+                text("""
                 SELECT * FROM client_metrics
-                 WHERE client_id = ? AND measurement_date >= ?
+                 WHERE client_id = :client_id AND measurement_date >= :start_date
                  ORDER BY measurement_date DESC LIMIT 1
-                """,
-                (client_id, start_date),
+                """),
+                {"client_id": client_id, "start_date": start_date},
             ).fetchone()
             if after_row:
-                metrics_after = dict(after_row)
+                metrics_after = dict(after_row._mapping)
 
             if metrics_before and metrics_after:
                 for col in ["weight", "body_fat_percentage", "muscle_mass",
@@ -373,23 +454,24 @@ def analyze_client_programs(conn, client_id: int) -> list:
         exercise_progress = []
         if sess["cnt"] and sess["cnt"] >= 2:
             prog_exercises = conn.execute(
-                """
+                text("""
                 SELECT pe.exercise_id, e.name AS exercise_name
                   FROM program_exercises pe
                   JOIN exercises e ON pe.exercise_id = e.id
-                 WHERE pe.program_id = ?
-                """,
-                (program_id,),
+                 WHERE pe.program_id = :program_id
+                """),
+                {"program_id": program_id},
             ).fetchall()
 
             for pe in prog_exercises:
+                pe = dict(pe._mapping)
                 early = conn.execute(
-                    """
+                    text("""
                     WITH early AS (
                         SELECT se.actual_weight, se.actual_reps, se.rpe
                           FROM session_exercises se
                           JOIN training_sessions ts ON se.session_id = ts.id
-                         WHERE ts.program_id = ? AND se.exercise_id = ?
+                         WHERE ts.program_id = :program_id AND se.exercise_id = :exercise_id
                          ORDER BY ts.session_date ASC
                          LIMIT 3
                     )
@@ -397,17 +479,18 @@ def analyze_client_programs(conn, client_id: int) -> list:
                            AVG(actual_reps) AS avg_r,
                            AVG(rpe) AS avg_rpe
                       FROM early
-                    """,
-                    (program_id, pe["exercise_id"]),
+                    """),
+                    {"program_id": program_id, "exercise_id": pe["exercise_id"]},
                 ).fetchone()
+                early = dict(early._mapping) if early else None
 
                 late = conn.execute(
-                    """
+                    text("""
                     WITH late AS (
                         SELECT se.actual_weight, se.actual_reps, se.rpe
                           FROM session_exercises se
                           JOIN training_sessions ts ON se.session_id = ts.id
-                         WHERE ts.program_id = ? AND se.exercise_id = ?
+                         WHERE ts.program_id = :program_id AND se.exercise_id = :exercise_id
                          ORDER BY ts.session_date DESC
                          LIMIT 3
                     )
@@ -415,9 +498,10 @@ def analyze_client_programs(conn, client_id: int) -> list:
                            AVG(actual_reps) AS avg_r,
                            AVG(rpe) AS avg_rpe
                       FROM late
-                    """,
-                    (program_id, pe["exercise_id"]),
+                    """),
+                    {"program_id": program_id, "exercise_id": pe["exercise_id"]},
                 ).fetchone()
+                late = dict(late._mapping) if late else None
 
                 has_early = early and (early["avg_w"] is not None or early["avg_r"] is not None)
                 has_late = late and (late["avg_w"] is not None or late["avg_r"] is not None)
@@ -523,40 +607,40 @@ async def get_client_analytics(client_id: int, user: dict = Depends(get_current_
         raise HTTPException(status_code=403, detail="Недостаточно прав")
     with get_db_raw() as conn:
         client = conn.execute(
-            "SELECT * FROM clients WHERE id = ?", (client_id,)
+            text("SELECT * FROM clients WHERE id = :client_id"), {"client_id": client_id}
         ).fetchone()
         if not client:
             raise HTTPException(status_code=404, detail="Client not found")
-        client = dict(client)
+        client = dict(client._mapping)
 
         stats = _client_stats(conn, client_id)
         monthly = conn.execute(
-            "SELECT strftime('%Y-%m', session_date) AS month, COUNT(*) AS visits"
-            " FROM training_sessions WHERE client_id = ?"
-            " GROUP BY month ORDER BY month DESC LIMIT 12",
-            (client_id,),
+            text(f"SELECT {sql_year_month('session_date')} AS month, COUNT(*) AS visits"
+            " FROM training_sessions WHERE client_id = :client_id"
+            " GROUP BY month ORDER BY month DESC LIMIT 12"),
+            {"client_id": client_id},
         ).fetchall()
         monthly_visits = [{"month": r[0], "visits": r[1]} for r in monthly]
 
         metrics_history = [
-            dict(r) for r in conn.execute(
-                "SELECT * FROM client_metrics WHERE client_id = ?"
-                " ORDER BY measurement_date",
-                (client_id,),
+            dict(r._mapping) for r in conn.execute(
+                text("SELECT * FROM client_metrics WHERE client_id = :client_id"
+                " ORDER BY measurement_date"),
+                {"client_id": client_id},
             ).fetchall()
         ]
         progress = analyze_progress(metrics_history)
         goals = goals_progress(conn, client_id)
 
         current_program = conn.execute(
-            """
+            text(f"""
             SELECT tp.*, t.name AS trainer_name
               FROM training_programs tp
               LEFT JOIN trainers t ON tp.trainer_id = t.id
-             WHERE tp.client_id = ? AND tp.is_active = 1
+             WHERE tp.client_id = :client_id AND tp.is_active = {sql_bool_true()}
              ORDER BY tp.created_at DESC LIMIT 1
-            """,
-            (client_id,),
+            """),
+            {"client_id": client_id},
         ).fetchone()
         churn = calculate_churn_risk(stats)
         program_analytics = analyze_client_programs(conn, client_id)
@@ -568,7 +652,7 @@ async def get_client_analytics(client_id: int, user: dict = Depends(get_current_
             "metrics_history": metrics_history,
             "progress_analysis": progress,
             "goals": goals,
-            "current_program": dict(current_program) if current_program else None,
+            "current_program": dict(current_program._mapping) if current_program else None,
             "churn_risk": churn,
             "program_analytics": program_analytics,
         }
@@ -577,12 +661,12 @@ async def get_client_analytics(client_id: int, user: dict = Depends(get_current_
 # ==================== Churn analytics (heuristic + survival) ====================
 
 @router.get("/api/analytics/churn")
-async def get_churn_analytics(user: dict = Depends(require_roles("admin", "trainer"))):
+async def get_churn_analytics(user: dict = Depends(require_roles("admin"))):
     """Аналитика оттока клиентов: оперативный балльный индикатор + анализ
     выживаемости (Каплан—Майер по группам типов абонементов)."""
     with get_db_raw() as conn:
-        clients = [dict(r) for r in conn.execute(
-            "SELECT * FROM clients").fetchall()]
+        clients = [dict(r._mapping) for r in conn.execute(
+            text("SELECT * FROM clients")).fetchall()]
         scored = []
         for cl in clients:
             if not cl["is_active"]:
@@ -624,14 +708,14 @@ def _kaplan_meier_by_subscription(conn) -> dict:
         return {"available": False, "reason": "lifelines не установлен"}
 
     rows = conn.execute(
-        """
+        text("""
         SELECT c.id, c.subscription_type, c.is_active,
-               COALESCE(c.subscription_start_date, c.registration_date)
-                   AS start_date,
+               c.registration_date AS start_date,
+               c.churn_date,
                (SELECT MAX(session_date) FROM training_sessions ts
                  WHERE ts.client_id = c.id) AS last_session
           FROM clients c
-        """
+        """)
     ).fetchall()
 
     durations: list = []
@@ -639,17 +723,22 @@ def _kaplan_meier_by_subscription(conn) -> dict:
     groups: list = []
     today = datetime.now()
     for r in rows:
+        r = dict(r._mapping)
         try:
             start = datetime.strptime(r["start_date"], "%Y-%m-%d")
         except (TypeError, ValueError):
             continue
-        # Отток: клиент неактивен — событие наступило в момент last_session
-        # (или сегодня, если сессий не было). Активный клиент = цензура.
+        # Отток: клиент неактивен — событие наступило в момент churn_date,
+        # при её отсутствии используется дата последней сессии или текущая дата.
+        # Активный клиент = цензура.
         if r["is_active"] == 0:
             try:
-                end = datetime.strptime(r["last_session"], "%Y-%m-%d")
+                end = datetime.strptime(r["churn_date"], "%Y-%m-%d")
             except (TypeError, ValueError):
-                end = today
+                try:
+                    end = datetime.strptime(r["last_session"], "%Y-%m-%d")
+                except (TypeError, ValueError):
+                    end = today
             event = 1
         else:
             end = today
@@ -709,31 +798,38 @@ def _cox_regression(conn) -> dict:
     import pandas as pd
 
     rows = conn.execute(
-        """
-        SELECT c.id, c.is_active, c.birth_date,
-               COALESCE(c.subscription_start_date, c.registration_date) AS start_date,
+        text(f"""
+        SELECT c.id, c.is_active, c.birth_date, c.churn_date,
+               c.registration_date AS start_date,
                (SELECT MAX(session_date) FROM training_sessions ts
                  WHERE ts.client_id = c.id) AS last_session,
                (SELECT COUNT(*) FROM training_sessions ts
                  WHERE ts.client_id = c.id) AS total_sessions,
                (SELECT AVG(satisfaction_rating) FROM training_sessions ts
-                 WHERE ts.client_id = c.id) AS avg_satisfaction
+                 WHERE ts.client_id = c.id) AS avg_satisfaction,
+               (SELECT COUNT(*) * 1.0 / 30 FROM training_sessions ts
+                 WHERE ts.client_id = c.id
+                   AND ts.session_date >= {sql_date_sub(30)}) AS avg_visits_per_month
           FROM clients c
-        """
+        """)
     ).fetchall()
 
     today = datetime.now()
     records: list = []
     for r in rows:
+        r = dict(r._mapping)
         try:
             start = datetime.strptime(r["start_date"], "%Y-%m-%d")
         except (TypeError, ValueError):
             continue
         if r["is_active"] == 0:
             try:
-                end = datetime.strptime(r["last_session"], "%Y-%m-%d")
+                end = datetime.strptime(r["churn_date"], "%Y-%m-%d")
             except (TypeError, ValueError):
-                end = today
+                try:
+                    end = datetime.strptime(r["last_session"], "%Y-%m-%d")
+                except (TypeError, ValueError):
+                    end = today
             event = 1
         else:
             end = today
@@ -749,7 +845,7 @@ def _cox_regression(conn) -> dict:
             "age": age,
             "total_sessions": r["total_sessions"] or 0,
             "avg_satisfaction": float(r["avg_satisfaction"]) if r["avg_satisfaction"] else 3.0,
-            "subscription_days": days,
+            "avg_visits_per_month": float(r["avg_visits_per_month"]) if r["avg_visits_per_month"] else 0.0,
         })
 
     if len(records) < 20 or sum(r["event"] for r in records) < 3:
@@ -757,8 +853,13 @@ def _cox_regression(conn) -> dict:
 
     df = pd.DataFrame(records)
     try:
+        from sklearn.model_selection import train_test_split
+        # Разделение 80/20 с фиксированным random_state для воспроизводимости
+        df_train, df_test = train_test_split(
+            df, test_size=0.2, random_state=42, stratify=df["event"]
+        )
         cph = CoxPHFitter(penalizer=0.01)
-        cph.fit(df.drop(columns=["subscription_days"]),
+        cph.fit(df_train,
                 duration_col="duration", event_col="event")
         summary = cph.summary
         coefs = []
@@ -770,11 +871,16 @@ def _cox_regression(conn) -> dict:
                 "ci_upper": round(float(row["exp(coef) upper 95%"]), 3),
                 "p_value": round(float(row["p"]), 5),
             })
+        # C-index на тестовой выборке (предсказательная способность)
+        c_index_test = round(float(cph.score(df_test, scoring_method="concordance_index")), 3)
+        # C-index на обучающей выборке (контроль переобучения)
+        c_index_train = round(float(cph.score(df_train, scoring_method="concordance_index")), 3)
         return {
             "available": True,
             "n": len(df),
             "events": int(df["event"].sum()),
-            "concordance_index": round(float(cph.concordance_index_), 3),
+            "concordance_index_test": c_index_test,
+            "concordance_index_train": c_index_train,
             "coefficients": coefs,
         }
     except Exception as exc:
@@ -785,10 +891,14 @@ def _cox_regression(conn) -> dict:
 
 @router.get("/api/analytics/segments")
 async def get_client_segments(
-    k: int = 4,
+    k: Optional[int] = None,
     user: dict = Depends(require_roles("admin", "trainer")),
 ):
-    """Сегментация клиентской базы методом k-средних с проекцией PCA."""
+    """Сегментация клиентской базы методом k-средних с проекцией PCA.
+
+    Если k не передан, оптимальное число кластеров выбирается автоматически
+    в диапазоне 2–8 по максимуму силуэтного коэффициента.
+    """
     try:
         from sklearn.cluster import KMeans
         from sklearn.decomposition import PCA
@@ -799,7 +909,7 @@ async def get_client_segments(
 
     with get_db_raw() as conn:
         rows = conn.execute(
-            """
+            text(f"""
             SELECT c.id, c.name, c.birth_date, c.fitness_goal,
                    (SELECT weight FROM client_metrics m
                      WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
@@ -807,44 +917,94 @@ async def get_client_segments(
                    (SELECT body_fat_percentage FROM client_metrics m
                      WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
                        AS init_bf,
+                   (SELECT muscle_mass FROM client_metrics m
+                     WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
+                       AS init_muscle_mass,
                    (SELECT max_pushups FROM client_metrics m
                      WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
                        AS init_pushups,
+                   (SELECT max_pullups FROM client_metrics m
+                     WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
+                       AS init_pullups,
                    (SELECT plank_seconds FROM client_metrics m
                      WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
                        AS init_plank,
+                   (SELECT run_5km_minutes FROM client_metrics m
+                     WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
+                       AS init_run_5km,
+                   (SELECT resting_heart_rate FROM client_metrics m
+                     WHERE m.client_id = c.id ORDER BY m.measurement_date LIMIT 1)
+                       AS init_resting_hr,
                    (SELECT COUNT(*) * 1.0 / 4.3 FROM training_sessions ts
                      WHERE ts.client_id = c.id
-                       AND ts.session_date >= date('now', '-30 days'))
+                       AND ts.session_date >= {sql_date_sub(30)})
                        AS visits_per_week
               FROM clients c
-             WHERE c.is_active = 1
-            """
+             WHERE c.is_active = {sql_bool_true()}
+            """)
         ).fetchall()
 
     today = datetime.now()
-    feats = []
+    raw_feats = []
     meta = []
+    feature_cols = [
+        "init_weight", "init_bf", "init_muscle_mass", "init_pushups",
+        "init_pullups", "init_plank", "init_run_5km", "init_resting_hr",
+    ]
     for r in rows:
+        r = dict(r._mapping)
         try:
             age = (today - datetime.strptime(r["birth_date"], "%Y-%m-%d")).days / 365.25
         except (TypeError, ValueError):
             continue
-        if any(r[col] is None for col in
-               ["init_weight", "init_bf", "init_pushups", "init_plank"]):
-            continue
-        feats.append([
-            age, r["init_weight"], r["init_bf"], r["init_pushups"],
-            r["init_plank"], r["visits_per_week"] or 0,
+        raw_feats.append([
+            age,
+            r["init_weight"],
+            r["init_bf"],
+            r["init_muscle_mass"],
+            r["init_pushups"],
+            r["init_pullups"],
+            r["init_plank"],
+            r["init_run_5km"],
+            r["init_resting_hr"],
+            r["visits_per_week"] if r["visits_per_week"] is not None else None,
         ])
         meta.append({"id": r["id"], "name": r["name"], "goal": r["fitness_goal"]})
 
-    if len(feats) < max(8, k * 2):
+    if len(raw_feats) < 16:
         return {"available": False, "reason": "недостаточно клиентов с замерами"}
 
-    X = np.array(feats, dtype=float)
+    X_raw = np.array(raw_feats, dtype=float)
+    # Заполнение пропущенных значений медианами по выборке (по столбцам)
+    col_medians = np.nanmedian(X_raw, axis=0)
+    for col_idx in range(X_raw.shape[1]):
+        mask = np.isnan(X_raw[:, col_idx])
+        X_raw[mask, col_idx] = col_medians[col_idx]
+
     scaler = StandardScaler()
-    Xs = scaler.fit_transform(X)
+    Xs = scaler.fit_transform(X_raw)
+
+    # Автоматический выбор k в диапазоне 2–8 по максимуму silhouette_score.
+    if k is None:
+        best_k = 2
+        best_sil = -1.0
+        for cand in range(2, 9):
+            if len(raw_feats) < cand * 2:
+                break
+            km_cand = KMeans(n_clusters=cand, n_init=10, random_state=42)
+            labels_cand = km_cand.fit_predict(Xs)
+            if len(set(labels_cand)) > 1:
+                sil_cand = float(silhouette_score(Xs, labels_cand))
+                if sil_cand > best_sil:
+                    best_sil = sil_cand
+                    best_k = cand
+        k = best_k
+    else:
+        k = max(2, min(8, k))
+
+    if len(raw_feats) < max(8, k * 2):
+        return {"available": False, "reason": "недостаточно клиентов с замерами"}
+
     km = KMeans(n_clusters=k, n_init=10, random_state=42)
     labels = km.fit_predict(Xs)
 
@@ -866,8 +1026,10 @@ async def get_client_segments(
     ]
 
     centroids_orig = scaler.inverse_transform(km.cluster_centers_)
-    feature_names = ["age", "weight", "body_fat", "pushups", "plank_sec",
-                     "visits_per_week"]
+    feature_names = [
+        "age", "weight", "body_fat", "muscle_mass", "pushups", "pullups",
+        "plank_sec", "run_5km_min", "resting_hr", "visits_per_week",
+    ]
     clusters_summary = []
     for j in range(k):
         size = int((labels == j).sum())
@@ -908,14 +1070,59 @@ def _holm_correction(p_values: list) -> list:
 
 
 def _cohens_d(a: list, b: list) -> float:
+    """Cohen's d со знаменателем как среднее арифметическое выборочных дисперсий.
+
+    Согласно ВКР: sₐ = √[(s₁² + s₂²) / 2] (average SD).
+    """
     a = np.array(a, dtype=float); b = np.array(b, dtype=float)
     if len(a) < 2 or len(b) < 2:
         return 0.0
     s1, s2 = a.var(ddof=1), b.var(ddof=1)
-    pooled = math.sqrt(((len(a) - 1) * s1 + (len(b) - 1) * s2) / (len(a) + len(b) - 2))
-    if pooled == 0:
+    avg_sd = math.sqrt((s1 + s2) / 2)
+    if avg_sd == 0:
         return 0.0
-    return float((a.mean() - b.mean()) / pooled)
+    return float((a.mean() - b.mean()) / avg_sd)
+
+
+def _welch_anova(*samples: list) -> tuple:
+    """Однофакторный дисперсионный анализ Уэлча (Welch's ANOVA).
+
+    Возвращает (F-статистика, p-значение). Реализация адаптирована
+    для ситуаций с неравными дисперсиями и/или неравными объёмами
+    выборок.
+    """
+    from scipy import stats
+    arrays = [np.array(s, dtype=float) for s in samples if len(s) > 1]
+    k = len(arrays)
+    if k < 2:
+        return 0.0, 1.0
+
+    means = [arr.mean() for arr in arrays]
+    variances = [arr.var(ddof=1) for arr in arrays]
+    ns = [len(arr) for arr in arrays]
+
+    # weights
+    w = [n / v if v > 0 else 0 for n, v in zip(ns, variances)]
+    W = sum(w)
+    if W == 0:
+        return 0.0, 1.0
+
+    # weighted grand mean
+    x_bar_prime = sum(wi * mi for wi, mi in zip(w, means)) / W
+
+    # numerator
+    numerator = sum(wi * (mi - x_bar_prime) ** 2 for wi, mi in zip(w, means))
+    df_between = k - 1
+
+    # denominator adjustment
+    lam = sum((1 - wi / W) ** 2 / (ni - 1) for wi, ni in zip(w, ns) if ni > 1)
+    denominator = 1 + (2 * (k - 2) / (k ** 2 - 1)) * lam
+
+    F = numerator / df_between / denominator
+    df_within = (k ** 2 - 1) / (3 * lam) if lam > 0 else float('inf')
+
+    p_value = 1 - stats.f.cdf(F, df_between, df_within)
+    return float(F), float(p_value)
 
 
 @router.get("/api/analytics/programs")
@@ -948,21 +1155,22 @@ async def get_programs_analytics(
         # Программы группируются по наименованию: одна и та же методика
         # может быть назначена многим клиентам как разные записи training_programs.
         programs = conn.execute(
-            "SELECT name, GROUP_CONCAT(client_id) AS client_ids"
+            text(f"SELECT name, {sql_group_concat('client_id::text', ',')} AS client_ids"
             " FROM training_programs"
-            " GROUP BY name"
+            " GROUP BY name")
         ).fetchall()
         program_data: dict = {}
         for p in programs:
+            p = dict(p._mapping)
             if not p["client_ids"]:
                 continue
             client_ids = [int(x) for x in p["client_ids"].split(",")]
             values: list = []
             for cid in set(client_ids):
                 ms = conn.execute(
-                    f"SELECT {col} FROM client_metrics WHERE client_id = ?"
-                    f" AND {col} IS NOT NULL ORDER BY measurement_date",
-                    (cid,),
+                    text(f"SELECT {col} FROM client_metrics WHERE client_id = :client_id"
+                    f" AND {col} IS NOT NULL ORDER BY measurement_date"),
+                    {"client_id": cid},
                 ).fetchall()
                 if len(ms) >= 2:
                     values.append(float(ms[-1][0]) - float(ms[0][0]))
@@ -1003,8 +1211,8 @@ async def get_programs_analytics(
             stat, p_val = stats.ttest_ind(samples[0], samples[1], equal_var=False)
             test_name = "Welch t-test"
         else:
-            stat, p_val = stats.f_oneway(*samples)
-            test_name = "One-way ANOVA"
+            stat, p_val = _welch_anova(*samples)
+            test_name = "Welch's ANOVA"
     else:
         if len(samples) == 2:
             stat, p_val = stats.mannwhitneyu(samples[0], samples[1],
@@ -1071,46 +1279,72 @@ async def get_programs_analytics(
 async def get_gym_load(user: dict = Depends(require_roles("admin"))):
     with get_db_raw() as conn:
         total_30d = conn.execute(
-            "SELECT COUNT(*) FROM training_sessions"
-            " WHERE session_date >= date('now', '-30 days')"
+            text(f"SELECT COUNT(*) FROM training_sessions"
+            f" WHERE session_date >= {sql_date_sub(30)}")
         ).fetchone()[0]
 
         by_hour = conn.execute(
-            """
-            SELECT CAST(strftime('%H', start_time) AS INTEGER) AS hour, COUNT(*) AS cnt
+            text(f"""
+            SELECT {sql_hour('start_time')} AS hour, COUNT(*) AS cnt
               FROM training_sessions
-             WHERE session_date >= date('now', '-30 days')
+             WHERE session_date >= {sql_date_sub(30)}
                AND start_time IS NOT NULL
              GROUP BY hour
              ORDER BY hour
-            """
+            """)
         ).fetchall()
         by_hour_list = [{"hour": r[0] or 0, "visits": r[1]} for r in by_hour]
 
         peak = sorted(by_hour_list, key=lambda x: x["visits"], reverse=True)[:5]
 
         by_weekday_hour = conn.execute(
-            """
-            SELECT CAST(strftime('%w', session_date) AS INTEGER) AS weekday,
-                   CAST(strftime('%H', start_time) AS INTEGER) AS hour,
+            text(f"""
+            SELECT {sql_dow('session_date')} AS weekday,
+                   {sql_hour('start_time')} AS hour,
                    COUNT(*) AS cnt
               FROM training_sessions
-             WHERE session_date >= date('now', '-30 days')
+             WHERE session_date >= {sql_date_sub(30)}
                AND start_time IS NOT NULL
              GROUP BY weekday, hour
              ORDER BY weekday, hour
-            """
+            """)
         ).fetchall()
         by_weekday_hour_list = [
             {"weekday": r[0] or 0, "hour": r[1] or 0, "visits": r[2]} for r in by_weekday_hour
+        ]
+
+        by_weekday_hour_matrix = []
+        for d in range(7):
+            hours = [0] * 24
+            by_weekday_hour_matrix.append({"day": DAY_NAMES[(d + 1) % 7], "hours": hours})
+
+        for r in by_weekday_hour_list:
+            weekday = r["weekday"]
+            monday_first_idx = (weekday + 6) % 7 if weekday is not None else 6
+            by_weekday_hour_matrix[monday_first_idx]["hours"][r["hour"]] = r["visits"]
+
+        trainer_load = conn.execute(
+            text(f"""
+            SELECT t.id, t.name, COUNT(ts.id) AS sessions,
+                   COALESCE(AVG(ts.satisfaction_rating), 0) AS avg_rating
+              FROM trainers t
+              LEFT JOIN training_sessions ts ON t.id = ts.trainer_id
+                   AND ts.session_date >= {sql_date_sub(30)}
+             WHERE t.is_active = {sql_bool_true()}
+             GROUP BY t.id, t.name
+             ORDER BY sessions DESC
+            """)
+        ).fetchall()
+        trainer_load_list = [
+            {"trainer_id": r[0], "name": r[1], "sessions": r[2], "avg_rating": round(r[3], 2)}
+            for r in trainer_load
         ]
 
         return {
             "total_sessions_30d": total_30d,
             "avg_per_day": round(total_30d / 30, 1) if total_30d else 0,
             "by_hour": by_hour_list,
-            "by_weekday_hour": by_weekday_hour_list,
+            "by_weekday_hour": by_weekday_hour_matrix,
             "peak_hours": peak,
+            "trainer_load": trainer_load_list,
         }
-
-

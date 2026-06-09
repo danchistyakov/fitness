@@ -28,7 +28,7 @@ const Dashboard = observer(() => {
 
   if (isLoading && !data) {
     return (
-      <Page title="Дашборд" subtitle="Обзор активности и ключевые метрики">
+      <Page title="Панель управления" subtitle="Обзор активности и ключевые метрики">
         <div className={s.statsGrid}>
           {[0, 1, 2, 3].map(i => (
             <Card key={i} variant="metric"><Skeleton height={88} /></Card>
@@ -40,7 +40,7 @@ const Dashboard = observer(() => {
 
   if (isEmpty) {
     return (
-      <Page title="Дашборд">
+      <Page title="Панель управления">
         <Empty
           title="Нет данных для отображения"
           description={isAdmin
@@ -69,7 +69,7 @@ const Dashboard = observer(() => {
 
   return (
     <Page
-      title="Дашборд"
+      title="Панель управления"
       subtitle="Обзор активности фитнес-центра за последние 30 дней"
       actions={isAdmin && (
         <Button

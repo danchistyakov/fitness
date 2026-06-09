@@ -5,6 +5,7 @@ def test_session_ratings_validation(client, admin_token):
         json={"name": "Валид", "email": "valid@test.fitness"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
+    assert r.status_code == 201
     cid = r.json()["id"]
 
     # fatigue_level > 10 — должно отклониться

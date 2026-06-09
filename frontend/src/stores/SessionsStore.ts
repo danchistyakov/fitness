@@ -3,6 +3,7 @@ import { api, ApiError } from '@/utils/api';
 import type {
   Session,
   SessionCreate,
+  SessionUpdate,
   SessionExercise,
   SessionExerciseCreate,
   CreateResponse,
@@ -58,6 +59,32 @@ class SessionsStore {
       const message = e instanceof ApiError ? e.detail : 'Ошибка создания';
       toastStore.add(message, 'error');
       return null;
+    }
+  }
+
+  async update(sessionId: number, payload: SessionUpdate): Promise<boolean> {
+    try {
+      await api.put(`/sessions/${sessionId}`, payload);
+      toastStore.add('Тренировка обновлена', 'success');
+      await this.load();
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка обновления';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async delete(sessionId: number): Promise<boolean> {
+    try {
+      await api.delete(`/sessions/${sessionId}`);
+      toastStore.add('Тренировка удалена', 'success');
+      await this.load();
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка удаления';
+      toastStore.add(message, 'error');
+      return false;
     }
   }
 

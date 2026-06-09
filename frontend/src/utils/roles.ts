@@ -8,8 +8,8 @@ export const ROLE_PAGES: Record<UserRole, string[]> = {
     'trainers-accounts',
   ],
   trainer: [
-    'dashboard', 'clients', 'exercises', 'programs', 'sessions',
-    'churn', 'segments', 'programs-analytics', 'gym-load', 'recommendations',
+    'clients', 'exercises', 'programs', 'sessions',
+    'segments', 'programs-analytics',
   ],
   client: ['dashboard', 'clients', 'programs', 'sessions'],
 };
@@ -22,9 +22,9 @@ export const ROUTE_TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/programs',           'Программы'],
   ['/sessions',           'Тренировки'],
   ['/churn',              'Анализ оттока'],
-  ['/segments',           'Сегменты'],
+  ['/segments',           'Сегментация клиентов'],
   ['/gym-load',           'Загруженность'],
   ['/recommendations',    'Рекомендации'],
   ['/trainers-accounts',  'Аккаунты тренеров'],
-  ['/',                   'Дашборд'],
+  ['/',                   'Панель управления'],
 ];

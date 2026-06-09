@@ -5,6 +5,7 @@ import { toastStore } from './ToastStore';
 
 interface ListFilters {
   muscle_group?: string;
+  load_type?: string;
   difficulty?: string;
   search?: string;
 }
@@ -80,6 +81,12 @@ class ExercisesStore {
   get muscleGroups(): string[] {
     return [
       ...new Set(this.exercises.map(e => e.muscle_group).filter((g): g is string => !!g)),
+    ].sort();
+  }
+
+  get loadTypes(): string[] {
+    return [
+      ...new Set(this.exercises.map(e => e.load_type).filter((t): t is string => !!t)),
     ].sort();
   }
 }

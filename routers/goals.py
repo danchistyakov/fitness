@@ -1,35 +1,27 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db, orm_to_dict,
     get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
+    _check_trainer_owns_client,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
+from schemas import ClientGoalCreate, ClientGoalUpdate
+from models import ClientGoal
 
 router = APIRouter()
 
 # ==================== Client Goals ====================
+
+def _check_client_owns_goal(session: Session, client_id: Optional[int], goal_id: int) -> bool:
+    if not client_id:
+        return False
+    goal = session.execute(select(ClientGoal).where(ClientGoal.id == goal_id)).scalar_one_or_none()
+    return goal is not None and goal.client_id == client_id
+
 
 @router.get("/api/goals/{client_id}")
 async def get_client_goals(client_id: int, user: dict = Depends(get_current_user)):
@@ -73,9 +65,11 @@ async def create_goal(
 @router.post("/api/goals/{goal_id}/achieve")
 async def mark_goal_achieved(
     goal_id: int,
-    user: dict = Depends(require_roles("admin", "trainer")),
+    user: dict = Depends(require_roles("admin", "trainer", "client")),
 ):
     with get_db() as session:
+        if user["role"] == "client" and not _check_client_owns_goal(session, user.get("client_id"), goal_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
         session.execute(update(ClientGoal).where(ClientGoal.id == goal_id).values(achieved_at=func.current_timestamp()))
         session.commit()
     return {"ok": True}
@@ -85,11 +79,13 @@ async def mark_goal_achieved(
 async def update_goal_status(
     goal_id: int,
     status: str,
-    user: dict = Depends(require_roles("admin", "trainer")),
+    user: dict = Depends(require_roles("admin", "trainer", "client")),
 ):
-    if status not in ("pending", "approved", "rejected"):
+    if status not in ("pending", "achieved", "cancelled"):
         raise HTTPException(status_code=400, detail="Invalid status")
     with get_db() as session:
+        if user["role"] == "client" and not _check_client_owns_goal(session, user.get("client_id"), goal_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
         session.execute(update(ClientGoal).where(ClientGoal.id == goal_id).values(status=status))
         session.commit()
     return {"ok": True}
@@ -99,14 +95,19 @@ async def update_goal_status(
 async def update_goal(
     goal_id: int,
     goal: ClientGoalUpdate,
-    user: dict = Depends(require_roles("admin", "trainer")),
+    user: dict = Depends(require_roles("admin", "trainer", "client")),
 ):
     fields = goal.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
+    if "status" in fields and fields["status"] not in ("pending", "achieved", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
     with get_db() as session:
+        if user["role"] == "client" and not _check_client_owns_goal(session, user.get("client_id"), goal_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        # Клиенту нельзя менять achieved_at — только тренер/админ
+        if user["role"] == "client" and "achieved_at" in fields:
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
         session.execute(update(ClientGoal).where(ClientGoal.id == goal_id).values(**fields))
         session.commit()
     return {"message": "Goal updated"}
-
-

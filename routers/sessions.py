@@ -1,31 +1,21 @@
-from typing import Optional, List
 from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update, delete
+from sqlalchemy import update as sqlalchemy_update
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db, orm_to_dict,
     get_current_user, require_roles,
     _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
+    _check_trainer_owns_session,
 )
-from schemas import *
+from schemas import TrainingSessionCreate, SessionExerciseCreate
 from models import (
     Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
+    TrainingSession, SessionExercise, TrainingCalendar
 )
-import numpy as np
 
 router = APIRouter()
 
@@ -137,6 +127,34 @@ async def create_session(
             if total_exercise_calories and not session_data.calories_burned:
                 db_session.calories_burned = total_exercise_calories
                 session.commit()
+
+        # Синхронизация календаря: отмечаем ближайшую запись как выполненную
+        if session_data.program_id and session_data.session_date:
+            cal = session.execute(
+                select(TrainingCalendar)
+                .where(
+                    TrainingCalendar.program_id == session_data.program_id,
+                    TrainingCalendar.planned_date == session_data.session_date,
+                    TrainingCalendar.status == "planned",
+                )
+            ).scalar_one_or_none()
+            if not cal:
+                cal = session.execute(
+                    select(TrainingCalendar)
+                    .where(
+                        TrainingCalendar.program_id == session_data.program_id,
+                        TrainingCalendar.status == "planned",
+                    )
+                    .order_by(TrainingCalendar.planned_date)
+                ).scalar_one_or_none()
+            if cal:
+                session.execute(
+                    sqlalchemy_update(TrainingCalendar)
+                    .where(TrainingCalendar.id == cal.id)
+                    .values(status="completed")
+                )
+                session.commit()
+
     return {"id": session_id, "message": "Session recorded"}
 
 
@@ -171,6 +189,49 @@ async def add_session_exercise(
         session.commit()
         session.refresh(exercise)
     return {"id": exercise.id}
+
+
+@router.put("/api/sessions/{session_id}")
+async def update_session(
+    session_id: int,
+    session_data: TrainingSessionCreate,
+    user: dict = Depends(require_roles("admin", "trainer", "client")),
+):
+    fields = session_data.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    with get_db() as session:
+        existing = session.execute(select(TrainingSession).where(TrainingSession.id == session_id)).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if user["role"] == "client" and user.get("client_id") != existing.client_id:
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        if user["role"] == "trainer" and not _check_trainer_owns_session(session, user.get("trainer_id"), session_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        fields.pop("client_id", None)
+        fields.pop("program_id", None)
+        fields.pop("trainer_id", None)
+        session.execute(update(TrainingSession).where(TrainingSession.id == session_id).values(**fields))
+        session.commit()
+    return {"message": "Session updated"}
+
+
+@router.delete("/api/sessions/{session_id}")
+async def delete_session(
+    session_id: int,
+    user: dict = Depends(require_roles("admin", "trainer", "client")),
+):
+    with get_db() as session:
+        existing = session.execute(select(TrainingSession).where(TrainingSession.id == session_id)).scalar_one_or_none()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if user["role"] == "client" and user.get("client_id") != existing.client_id:
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        if user["role"] == "trainer" and not _check_trainer_owns_session(session, user.get("trainer_id"), session_id):
+            raise HTTPException(status_code=403, detail="Недостаточно прав")
+        session.execute(delete(TrainingSession).where(TrainingSession.id == session_id))
+        session.commit()
+    return {"message": "Session deleted"}
 
 
 @router.get("/api/sessions/{session_id}/exercises")

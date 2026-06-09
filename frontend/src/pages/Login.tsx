@@ -19,8 +19,8 @@ interface DemoAccount {
 
 const DEMO_ACCOUNTS: DemoAccount[] = [
   { login: 'admin',    password: 'admin123',   role: 'Администратор', hint: 'Полный доступ ко всем разделам', icon: Shield,    color: 'var(--success)' },
-  { login: 'trainer1', password: 'trainer123', role: 'Тренер',        hint: 'Клиенты, программы, аналитика',  icon: UserCheck, color: 'var(--info)' },
-  { login: 'client1',  password: 'client123',  role: 'Клиент',        hint: 'Дашборд и свои программы',       icon: User,      color: 'var(--purple)' },
+  { login: 'trainer01', password: 'trainer123', role: 'Тренер',        hint: 'Клиенты, программы, аналитика',  icon: UserCheck, color: 'var(--info)' },
+  { login: 'client1',  password: 'client123',  role: 'Клиент',        hint: 'Панель управления и свои программы',       icon: User,      color: 'var(--purple)' },
 ];
 
 const Login = observer(() => {
@@ -51,7 +51,7 @@ const Login = observer(() => {
               Fit<span className={s.brandAccent}>Analytics</span>
             </div>
             <div className={s.brandSubtitle}>
-              Анализ персонализированных тренировочных программ
+              Анализ тренировочных программ
             </div>
           </div>
         </header>
@@ -145,7 +145,7 @@ const Login = observer(() => {
         </section>
 
         <footer className={s.footer}>
-          ВКР • Бакалавриат • FitAnalytics v2.0.0
+          ООО "ФитАналитикс"
         </footer>
       </div>
     </div>

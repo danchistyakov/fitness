@@ -36,7 +36,7 @@ const Exercises = observer(() => {
   return (
     <Page
       title="Упражнения"
-      subtitle={`Справочник: ${exercisesStore.exercises.length}`}
+      subtitle={`Справочник: ${exercisesStore.exercises.length} шт.`}
       actions={
         <Button iconLeft={<Plus size={14} />} onClick={() => setCreating(true)}>
           Добавить
@@ -60,6 +60,15 @@ const Exercises = observer(() => {
             <option value="">Все группы мышц</option>
             {exercisesStore.muscleGroups.map(g => (
               <option key={g} value={g}>{g}</option>
+            ))}
+          </Select>
+          <Select
+            value={exercisesStore.filters.load_type ?? ''}
+            onChange={e => exercisesStore.setFilter('load_type', e.target.value)}
+          >
+            <option value="">Любой тип нагрузки</option>
+            {exercisesStore.loadTypes.map(t => (
+              <option key={t} value={t}>{t}</option>
             ))}
           </Select>
           <Select
@@ -92,6 +101,7 @@ const Exercises = observer(() => {
                   <div className={s.exerciseName}>{ex.name}</div>
                   <div className={s.exerciseMeta}>
                     {ex.muscle_group && <Badge variant="info">{ex.muscle_group}</Badge>}
+                    {ex.load_type && <Badge variant="secondary">{ex.load_type}</Badge>}
                     {ex.difficulty && (
                       <Badge variant={ex.difficulty === 'hard' ? 'danger' : ex.difficulty === 'easy' ? 'success' : 'warning'}>
                         {difficultyLabels[ex.difficulty] ?? ex.difficulty}

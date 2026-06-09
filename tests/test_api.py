@@ -59,9 +59,10 @@ class TestClients:
             json={"name": "Иван Тестов", "email": "ivan@test.com", "phone": "+79990001122"},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         data = resp.json()
-        assert "id" in data
+        assert data["name"] == "Иван Тестов"
+        assert data["email"] == "ivan@test.com"
         # проверяем через GET, что клиент создан с нужными полями
         r2 = client.get(f"/api/clients/{data['id']}", headers={"Authorization": f"Bearer {token}"})
         assert r2.status_code == 200
@@ -122,6 +123,44 @@ class TestPrograms:
         r2 = client.get(f"/api/programs/{data['id']}", headers={"Authorization": f"Bearer {token}"})
         assert r2.json()["name"] == "Базовая программа"
         assert r2.json()["is_active"] is True
+
+    def test_program_exercises_crud(self):
+        token = _get_admin_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        client_resp = client.post(
+            "/api/clients",
+            json={"name": "Клиент с упражнениями", "email": "prog-exercises@test.com"},
+            headers=headers,
+        )
+        program_resp = client.post(
+            "/api/programs",
+            json={"client_id": client_resp.json()["id"], "name": "Программа с упражнениями"},
+            headers=headers,
+        )
+        exercise_resp = client.post(
+            "/api/exercises",
+            json={"name": "Жим лёжа", "muscle_group": "Грудь"},
+            headers=headers,
+        )
+
+        program_id = program_resp.json()["id"]
+        add_resp = client.post(
+            f"/api/programs/{program_id}/exercises",
+            json={
+                "program_id": program_id,
+                "exercise_id": exercise_resp.json()["id"],
+                "sets": 4,
+                "reps": 8,
+            },
+            headers=headers,
+        )
+        assert add_resp.status_code == 200
+
+        list_resp = client.get(f"/api/programs/{program_id}/exercises", headers=headers)
+        assert list_resp.status_code == 200
+        payload = list_resp.json()
+        assert payload[0]["exercise_name"] == "Жим лёжа"
+        assert payload[0]["muscle_group"] == "Грудь"
 
 
 class TestAnalytics:

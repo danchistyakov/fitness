@@ -17,14 +17,11 @@ import math
 import os
 import random
 import secrets
-import sqlite3
 
 from sqlalchemy import select, insert, update, delete, func, text
 from sqlalchemy.orm import Session
-from db import engine, SessionLocal
+from db import engine, SessionLocal, DATABASE_URL
 from fastapi import Depends, Header, HTTPException
-
-import numpy as np
 
 from models import (
     Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
@@ -32,9 +29,65 @@ from models import (
     Recommendation, User, TrainingCalendar
 )
 
-DATABASE = os.getenv("DATABASE", "fitness_analytics.db")
-
 DAY_NAMES = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+
+
+# ==================== Cross-database SQL helpers ====================
+
+def _pg_expr(pg: str, sqlite: str) -> str:
+    return sqlite if DATABASE_URL.startswith("sqlite") else pg
+
+
+def sql_date_sub(days: int) -> str:
+    return _pg_expr(f"CURRENT_DATE - INTERVAL '{days} days'", f"date('now', '-{days} days')")
+
+
+def sql_dow(col: str) -> str:
+    return _pg_expr(f"EXTRACT(DOW FROM {col})::int", f"strftime('%w', {col})")
+
+
+def sql_year_week(col: str) -> str:
+    return _pg_expr(f"TO_CHAR({col}, 'YYYY-IW')", f"strftime('%Y-%W', {col})")
+
+
+def sql_year_month(col: str) -> str:
+    return _pg_expr(f"TO_CHAR({col}, 'YYYY-MM')", f"strftime('%Y-%m', {col})")
+
+
+def sql_hour(col: str) -> str:
+    return _pg_expr(f"EXTRACT(HOUR FROM {col})::int", f"strftime('%H', {col})")
+
+
+def sql_group_concat(col: str, sep: str = ", ") -> str:
+    return _pg_expr(f"STRING_AGG({col}, '{sep}')", f"GROUP_CONCAT({col}, '{sep}')")
+
+
+def sql_bool_true() -> str:
+    return "1" if DATABASE_URL.startswith("sqlite") else "true"
+
+
+def sql_bool_false() -> str:
+    return "0" if DATABASE_URL.startswith("sqlite") else "false"
+
+
+def clear_demo_tables(conn):
+    if DATABASE_URL.startswith("sqlite"):
+        conn.execute(text("UPDATE users SET trainer_id = NULL, client_id = NULL"))
+        for t in ["session_exercises", "training_sessions", "program_exercises",
+                  "training_calendar", "training_programs", "client_metrics",
+                  "client_goals", "recommendations", "exercises", "clients", "trainers"]:
+            conn.execute(text(f"DELETE FROM {t}"))
+            try:
+                conn.execute(text(f"DELETE FROM sqlite_sequence WHERE name='{t}'"))
+            except Exception:
+                pass
+    else:
+        conn.execute(text("""
+            TRUNCATE session_exercises, training_sessions, program_exercises,
+            training_calendar, training_programs, client_metrics,
+            client_goals, recommendations, exercises, clients, trainers
+            RESTART IDENTITY CASCADE
+        """))
 
 
 # ==================== Database ====================
@@ -44,7 +97,8 @@ def get_db():
     """ORM-сессия для CRUD-операций."""
     session = SessionLocal()
     try:
-        session.execute(text("PRAGMA foreign_keys = ON"))
+        if DATABASE_URL.startswith("sqlite"):
+            session.execute(text("PRAGMA foreign_keys = ON"))
         yield session
     finally:
         session.close()
@@ -52,15 +106,14 @@ def get_db():
 
 @contextmanager
 def get_db_raw():
-    """Raw-SQL соединение для сложных аналитических запросов."""
-    raw = engine.raw_connection()
-    conn = raw.driver_connection
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    """Raw-SQL соединение для сложных аналитических запросов (SQLAlchemy Connection)."""
+    conn = engine.connect()
     try:
+        if DATABASE_URL.startswith("sqlite"):
+            conn.execute(text("PRAGMA foreign_keys = ON"))
         yield conn
     finally:
-        raw.close()
+        conn.close()
 
 
 def init_db():
@@ -162,6 +215,10 @@ def seed_demo_trainers():
                     trainer_id=trainer.id,
                 )
                 session.add(user)
+            else:
+                existing_user.trainer_id = trainer.id
+                existing_user.full_name = name
+                existing_user.password_hash = _hash_password(f"trainer{i:02d}")
         session.commit()
 
 
@@ -211,8 +268,8 @@ def _check_trainer_owns_session(session: Session, trainer_id: Optional[int], ses
 def _check_trainer_owns_client_raw(conn, trainer_id: Optional[int], client_id: int) -> bool:
     if not trainer_id:
         return False
-    row = conn.execute("SELECT trainer_id FROM clients WHERE id = ?", (client_id,)).fetchone()
-    return row is not None and row["trainer_id"] == trainer_id
-
-
-
+    row = conn.execute(
+        text("SELECT trainer_id FROM clients WHERE id = :id"),
+        {"id": client_id}
+    ).fetchone()
+    return row is not None and row[0] == trainer_id

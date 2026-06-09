@@ -18,7 +18,7 @@ class DashboardStore {
       const data = await api.get<DashboardData>('/analytics/dashboard');
       runInAction(() => { this.data = data; });
     } catch (e) {
-      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки дашборда';
+      const message = e instanceof ApiError ? e.detail : 'Ошибка загрузки панели управления';
       toastStore.add(message, 'error');
     } finally {
       runInAction(() => { this.isLoading = false; });

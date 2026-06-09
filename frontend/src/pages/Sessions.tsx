@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 import {
   sessionsStore, clientsStore, programsStore, trainersStore,
 } from '@/stores';
-import type { Session, SessionCreate } from '@/types/api';
+import type { Session, SessionCreate, SessionUpdate } from '@/types/api';
 import { Page } from '@/components/Page';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -15,12 +15,15 @@ import { Combobox } from '@/components/Combobox';
 import { Modal } from '@/components/Modal';
 import { DataTable, type Column } from '@/components/DataTable';
 import { Badge } from '@/components/Badge';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { formatDate } from '@/utils/format';
 import s from './Sessions.module.scss';
 
 const Sessions = observer(() => {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [deletingSession, setDeletingSession] = useState<Session | null>(null);
 
   useEffect(() => {
     sessionsStore.load();
@@ -52,18 +55,27 @@ const Sessions = observer(() => {
       ) : '—',
     },
     {
-      key: 'arrow',
+      key: 'actions',
       header: '',
-      width: '32px',
+      width: '80px',
       align: 'right',
-      cell: () => <ChevronRight size={14} />,
+      cell: x => (
+        <div className={s.rowActions} onClick={e => e.stopPropagation()}>
+          <button type="button" className={s.iconBtn} onClick={() => setEditingSession(x)} title="Редактировать">
+            <Edit2 size={13} />
+          </button>
+          <button type="button" className={s.iconBtn} onClick={() => setDeletingSession(x)} title="Удалить">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ),
     },
   ];
 
   return (
     <Page
       title="Тренировки"
-      subtitle={`Журнал тренировок • ${sessionsStore.sessions.length}`}
+      subtitle={`Журнал тренировок – ${sessionsStore.sessions.length} шт.`}
       actions={
         <Button iconLeft={<Plus size={14} />} onClick={() => setCreating(true)}>
           Зафиксировать тренировку
@@ -109,6 +121,19 @@ const Sessions = observer(() => {
       </Card>
 
       <SessionCreateModal open={creating} onClose={() => setCreating(false)} />
+      <SessionEditModal open={!!editingSession} onClose={() => setEditingSession(null)} session={editingSession} />
+      <ConfirmDialog
+        open={!!deletingSession}
+        onCancel={() => setDeletingSession(null)}
+        onConfirm={async () => {
+          if (deletingSession) {
+            await sessionsStore.delete(deletingSession.id);
+            setDeletingSession(null);
+          }
+        }}
+        title="Удалить тренировку?"
+        message={deletingSession ? `Тренировка от ${formatDate(deletingSession.session_date)} будет удалена.` : ''}
+      />
     </Page>
   );
 });
@@ -203,6 +228,92 @@ const SessionCreateModal = observer(({ open, onClose }: ModalProps) => {
         <div className={s.formRow}>
           <Field label="Дата" required>
             <Input type="date" value={form.session_date} onChange={e => setForm({ ...form, session_date: e.target.value })} required />
+          </Field>
+          <Field label="Время старта">
+            <Input type="time" value={form.start_time ?? ''} onChange={e => setForm({ ...form, start_time: e.target.value })} />
+          </Field>
+          <Field label="Длительность, мин">
+            <Input type="number" min="0" value={form.duration_minutes ?? ''} onChange={e => setForm({ ...form, duration_minutes: e.target.value ? Number(e.target.value) : null })} />
+          </Field>
+        </div>
+        <div className={s.formRow}>
+          <Field label="Сожжено ккал">
+            <Input type="number" min="0" value={form.calories_burned ?? ''} onChange={e => setForm({ ...form, calories_burned: e.target.value ? Number(e.target.value) : null })} />
+          </Field>
+          <Field label="Усталость 1–10">
+            <Input type="number" min="1" max="10" value={form.fatigue_level ?? ''} onChange={e => setForm({ ...form, fatigue_level: e.target.value ? Number(e.target.value) : null })} />
+          </Field>
+          <Field label="Удовлетворённость">
+            <Select value={form.satisfaction_rating ?? 4} onChange={e => setForm({ ...form, satisfaction_rating: Number(e.target.value) })}>
+              <option value="5">5 — отлично</option>
+              <option value="4">4 — хорошо</option>
+              <option value="3">3 — нормально</option>
+              <option value="2">2 — плохо</option>
+              <option value="1">1 — ужасно</option>
+            </Select>
+          </Field>
+        </div>
+        <Field label="Комментарий">
+          <Textarea
+            rows={2}
+            value={form.comment ?? ''}
+            onChange={e => setForm({ ...form, comment: e.target.value })}
+          />
+        </Field>
+      </form>
+    </Modal>
+  );
+});
+
+interface EditModalProps { open: boolean; onClose: () => void; session: Session | null; }
+
+const SessionEditModal = observer(({ open, onClose, session }: EditModalProps) => {
+  const [form, setForm] = useState<SessionUpdate>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      setForm({
+        session_date: session.session_date,
+        start_time: session.start_time,
+        duration_minutes: session.duration_minutes,
+        calories_burned: session.calories_burned,
+        fatigue_level: session.fatigue_level,
+        satisfaction_rating: session.satisfaction_rating,
+        comment: session.comment,
+      });
+    }
+  }, [session]);
+
+  if (!session) return null;
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const ok = await sessionsStore.update(session.id, form);
+    setSubmitting(false);
+    if (ok) onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Редактировать тренировку"
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button form="ses-edit-form" type="submit" loading={submitting}>
+            Сохранить
+          </Button>
+        </>
+      }
+    >
+      <form id="ses-edit-form" onSubmit={onSubmit} className={s.form}>
+        <div className={s.formRow}>
+          <Field label="Дата" required>
+            <Input type="date" value={form.session_date ?? ''} onChange={e => setForm({ ...form, session_date: e.target.value })} required />
           </Field>
           <Field label="Время старта">
             <Input type="time" value={form.start_time ?? ''} onChange={e => setForm({ ...form, start_time: e.target.value })} />

@@ -20,13 +20,13 @@ interface NavItem {
 }
 
 const ALL_NAV: NavItem[] = [
-  { id: 'dashboard',          path: '/',                   label: 'Дашборд',           icon: LayoutDashboard, section: 'main' },
+  { id: 'dashboard',          path: '/',                   label: 'Панель управления',           icon: LayoutDashboard, section: 'main' },
   { id: 'clients',            path: '/clients',            label: 'Клиенты',           icon: Users,           section: 'main' },
   { id: 'exercises',          path: '/exercises',          label: 'Упражнения',        icon: Dumbbell,        section: 'main' },
   { id: 'programs',           path: '/programs',           label: 'Программы',         icon: Target,          section: 'main' },
   { id: 'sessions',           path: '/sessions',           label: 'Тренировки',        icon: ClipboardList,   section: 'main' },
   { id: 'churn',              path: '/churn',              label: 'Анализ оттока',     icon: TrendingDown,    section: 'analytics' },
-  { id: 'segments',           path: '/segments',           label: 'Сегменты',          icon: Cluster,         section: 'analytics' },
+  { id: 'segments',           path: '/segments',           label: 'Сегментация клиентов',icon: Cluster,       section: 'analytics' },
   { id: 'programs-analytics', path: '/programs-analytics', label: 'Сравнение программ', icon: BarChart3,      section: 'analytics' },
   { id: 'gym-load',           path: '/gym-load',           label: 'Загруженность',     icon: Building2,       section: 'analytics' },
   { id: 'recommendations',    path: '/recommendations',    label: 'Рекомендации',      icon: Lightbulb,       section: 'analytics' },
@@ -109,10 +109,6 @@ const Sidebar = observer(({ isOpen, onClose }: SidebarProps) => {
           </div>
         </nav>
 
-        <div className={s.footer}>
-          <div className={s.footerLabel}>ВКР • Бакалавриат</div>
-          <div className={s.footerVersion}>v2.0.0</div>
-        </div>
       </aside>
     </>
   );

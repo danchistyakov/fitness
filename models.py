@@ -30,6 +30,7 @@ class Client(Base):
     health_notes = Column(Text)
     contraindications = Column(Text)
     is_active = Column(Boolean, default=True)
+    churn_date = Column(Date)                    # дата оттока (мягкое удаление)
 
     # Дополнительные поля, требуемые ВКР
     height = Column(Float)                       # рост (см)
@@ -40,6 +41,7 @@ class Client(Base):
     goals = relationship("ClientGoal", back_populates="client", cascade="all, delete-orphan")
     programs = relationship("TrainingProgram", back_populates="client", cascade="all, delete-orphan")
     sessions = relationship("TrainingSession", back_populates="client", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="client")
 
 
 class Trainer(Base):
@@ -55,6 +57,8 @@ class Trainer(Base):
     clients = relationship("Client", back_populates="trainer")
     programs = relationship("TrainingProgram", back_populates="trainer")
     sessions = relationship("TrainingSession", back_populates="trainer")
+    recommendations = relationship("Recommendation", back_populates="trainer")
+    users = relationship("User", back_populates="trainer")
 
 
 class Exercise(Base):
@@ -94,6 +98,7 @@ class TrainingProgram(Base):
     trainer = relationship("Trainer", back_populates="programs")
     exercises = relationship("ProgramExercise", back_populates="program", cascade="all, delete-orphan")
     sessions = relationship("TrainingSession", back_populates="program")
+    calendar = relationship("TrainingCalendar", back_populates="program", cascade="all, delete-orphan")
 
 
 class ProgramExercise(Base):
@@ -122,7 +127,7 @@ class TrainingSession(Base):
     program_id = Column(Integer, ForeignKey("training_programs.id"))
     trainer_id = Column(Integer, ForeignKey("trainers.id"))
     session_date = Column(Date, nullable=False)
-    start_time = Column(Time)  # SQLite хранит TIME как TEXT в формате HH:MM:SS
+    start_time = Column(Time)
     duration_minutes = Column(Integer)
     calories_burned = Column(Integer)
     fatigue_level = Column(Integer, CheckConstraint("fatigue_level BETWEEN 1 AND 10"))
@@ -195,7 +200,6 @@ class Recommendation(Base):
     __tablename__ = "recommendations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    client_id = Column(Integer, ForeignKey("clients.id"))
     trainer_id = Column(Integer, ForeignKey("trainers.id"))
     recommendation_type = Column(String)
     title = Column(String)
@@ -203,6 +207,8 @@ class Recommendation(Base):
     priority = Column(Integer, default=5)
     created_at = Column(DateTime, default=func.current_timestamp())
     is_applied = Column(Boolean, default=False)
+
+    trainer = relationship("Trainer", back_populates="recommendations")
 
 
 class User(Base):
@@ -218,6 +224,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.current_timestamp())
 
+    trainer = relationship("Trainer", back_populates="users")
+    client = relationship("Client", back_populates="users")
+
 
 class TrainingCalendar(Base):
     """Автоматически сгенерированный календарный план тренировок."""
@@ -228,4 +237,6 @@ class TrainingCalendar(Base):
     planned_date = Column(Date, nullable=False)
     day_of_week = Column(Integer)
     status = Column(String, default="planned")  # planned, completed, skipped
+
+    program = relationship("TrainingProgram", back_populates="calendar")
 

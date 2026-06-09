@@ -5,6 +5,7 @@ import type {
   ProgramCreate,
   ProgramExercise,
   ProgramExerciseCreate,
+  ProgramExerciseUpdate,
   CreateResponse,
   CalendarItem,
 } from '@/types/api';
@@ -104,6 +105,30 @@ class ProgramsStore {
       return true;
     } catch (e) {
       const message = e instanceof ApiError ? e.detail : 'Ошибка добавления упражнения';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async updateExercise(programId: number, peId: number, payload: ProgramExerciseUpdate): Promise<boolean> {
+    try {
+      await api.put(`/programs/${programId}/exercises/${peId}`, payload);
+      await this.loadExercises(programId);
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка обновления упражнения';
+      toastStore.add(message, 'error');
+      return false;
+    }
+  }
+
+  async deleteExercise(programId: number, peId: number): Promise<boolean> {
+    try {
+      await api.delete(`/programs/${programId}/exercises/${peId}`);
+      await this.loadExercises(programId);
+      return true;
+    } catch (e) {
+      const message = e instanceof ApiError ? e.detail : 'Ошибка удаления упражнения';
       toastStore.add(message, 'error');
       return false;
     }

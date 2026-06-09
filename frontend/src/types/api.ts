@@ -52,6 +52,19 @@ export interface ClientCreate {
   health_notes?: string | null;
   contraindications?: string | null;
   height?: number | null;
+  weight?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass?: number | null;
+  chest_cm?: number | null;
+  waist_cm?: number | null;
+  hips_cm?: number | null;
+  biceps_cm?: number | null;
+  thighs_cm?: number | null;
+  resting_heart_rate?: number | null;
+  max_pushups?: number | null;
+  max_pullups?: number | null;
+  plank_seconds?: number | null;
+  run_5km_minutes?: number | null;
   trainer_id?: number | null;
 }
 
@@ -64,6 +77,20 @@ export interface ClientUpdate {
   health_notes?: string | null;
   contraindications?: string | null;
   is_active?: number;
+  height?: number | null;
+  weight?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass?: number | null;
+  chest_cm?: number | null;
+  waist_cm?: number | null;
+  hips_cm?: number | null;
+  biceps_cm?: number | null;
+  thighs_cm?: number | null;
+  resting_heart_rate?: number | null;
+  max_pushups?: number | null;
+  max_pullups?: number | null;
+  plank_seconds?: number | null;
+  run_5km_minutes?: number | null;
 }
 
 export interface ClientsListResponse {
@@ -171,6 +198,17 @@ export interface ProgramExerciseCreate {
   methodical_note?: string | null;
 }
 
+export interface ProgramExerciseUpdate {
+  exercise_id?: number;
+  sets?: number;
+  reps?: number;
+  weight?: number | null;
+  rest_seconds?: number;
+  day_of_week?: number | null;
+  order_number?: number | null;
+  methodical_note?: string | null;
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────
 
 export interface Session {
@@ -195,6 +233,19 @@ export interface SessionCreate {
   program_id?: number | null;
   trainer_id?: number | null;
   session_date: string;
+  start_time?: string | null;
+  duration_minutes?: number | null;
+  calories_burned?: number | null;
+  fatigue_level?: number | null;
+  satisfaction_rating?: number | null;
+  comment?: string | null;
+}
+
+export interface SessionUpdate {
+  client_id?: number;
+  program_id?: number | null;
+  trainer_id?: number | null;
+  session_date?: string;
   start_time?: string | null;
   duration_minutes?: number | null;
   calories_burned?: number | null;
@@ -253,6 +304,24 @@ export interface ClientMetrics {
 export interface ClientMetricsCreate {
   client_id: number;
   measurement_date: string;
+  weight?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass?: number | null;
+  chest_cm?: number | null;
+  waist_cm?: number | null;
+  hips_cm?: number | null;
+  biceps_cm?: number | null;
+  thighs_cm?: number | null;
+  resting_heart_rate?: number | null;
+  max_pushups?: number | null;
+  max_pullups?: number | null;
+  plank_seconds?: number | null;
+  run_5km_minutes?: number | null;
+}
+
+export interface ClientMetricsUpdate {
+  client_id?: number;
+  measurement_date?: string;
   weight?: number | null;
   body_fat_percentage?: number | null;
   muscle_mass?: number | null;

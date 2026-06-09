@@ -1,4 +1,16 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fitness
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
   backend:
     build:
       context: .
@@ -6,22 +18,22 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - sqlite_data:/app/data
-      - ./nginx/ssl:/etc/nginx/ssl
     environment:
-      - DATABASE=/app/data/fitness_analytics.db
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fitness
       - STATIC_DIR=/app/static
+    depends_on:
+      - db
 
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
       - certbot_certs:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
@@ -37,6 +49,6 @@ services:
       - ssl
 
 volumes:
-  sqlite_data:
+  pg_data:
   certbot_certs:
   certbot_www:

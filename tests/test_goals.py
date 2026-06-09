@@ -4,6 +4,7 @@ def test_update_goal(client, admin_token):
         json={"name": "Цели", "email": "goals@test.fitness"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
+    assert r.status_code == 201
     cid = r.json()["id"]
 
     r2 = client.post(

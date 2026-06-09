@@ -4,16 +4,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, AlertTriangle, Heart, Target as TargetIcon,
   Activity as ActivityIcon, ClipboardList, BarChart3, User as UserIcon,
-  CheckCircle, Plus, TrendingUp,
+  CheckCircle, Plus, TrendingUp, Edit2, Trash2,
 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import {
-  clientsStore, analyticsStore, goalsStore, programsStore, sessionsStore,
-  authStore, trainersStore,
+  analyticsStore, goalsStore, programsStore, sessionsStore,
+  authStore, trainersStore, metricsStore,
 } from '@/stores';
-import type { ClientGoalCreate, ProgramCreate } from '@/types/api';
+import type { ClientGoalCreate, ProgramCreate, ClientMetricsCreate, ClientMetricsUpdate } from '@/types/api';
 import { Page } from '@/components/Page';
 import { Card } from '@/components/Card';
 import { Tabs } from '@/components/Tabs';
@@ -25,6 +25,7 @@ import { Field } from '@/components/Field';
 import { Input, Select, Textarea } from '@/components/Input';
 import { Combobox } from '@/components/Combobox';
 import { Modal } from '@/components/Modal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ScoreBreakdown } from '@/components/ScoreBreakdown';
 import { DataTable, type Column } from '@/components/DataTable';
 import {
@@ -390,10 +391,17 @@ function GoalCreateModal({ open, clientId, onClose }: { open: boolean; clientId:
 
 const MetricsTab = observer(() => {
   const a = analyticsStore.clientAnalytics;
+  const [creating, setCreating] = useState(false);
+  const [editingMetric, setEditingMetric] = useState<any>(null);
+  const [deletingMetric, setDeletingMetric] = useState<any>(null);
+
   if (!a) return <Card><Empty title="Нет данных" /></Card>;
-  if (a.metrics_history.length === 0) {
-    return <Card><Empty title="Замеры не загружены" /></Card>;
-  }
+
+  const isClient = authStore.role === 'client';
+
+  useEffect(() => {
+    metricsStore.load(a.client.id);
+  }, [a.client.id]);
 
   const data = a.metrics_history.map(m => ({
     date: m.measurement_date,
@@ -406,53 +414,289 @@ const MetricsTab = observer(() => {
   const muscles = data.map(d => d.muscle).filter((v): v is number => v != null);
   const bodyFats = data.map(d => d.body_fat).filter((v): v is number => v != null);
 
-  const minKg = Math.min(...weights, ...muscles);
-  const maxKg = Math.max(...weights, ...muscles);
+  const minKg = weights.length ? Math.min(...weights, ...muscles) : 0;
+  const maxKg = weights.length ? Math.max(...weights, ...muscles) : 100;
   const kgPadding = maxKg > minKg ? (maxKg - minKg) * 0.15 : 2;
 
-  const minFat = Math.min(...bodyFats);
-  const maxFat = Math.max(...bodyFats);
+  const minFat = bodyFats.length ? Math.min(...bodyFats) : 0;
+  const maxFat = bodyFats.length ? Math.max(...bodyFats) : 50;
   const fatPadding = maxFat > minFat ? (maxFat - minFat) * 0.15 : 2;
 
   return (
-    <div className={s.grid}>
-      <Card title="Динамика веса" className={s.fullSpan}>
-        <div style={{ height: 280 }}>
-          <ResponsiveContainer>
-            <LineChart data={data}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 11 }}
-                tickFormatter={(v) => formatDate(v).slice(0, 6)} />
-              <YAxis yAxisId="left" domain={[minKg - kgPadding, maxKg + kgPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="right" orientation="right" domain={[minFat - fatPadding, maxFat + fatPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)' }}
-                labelFormatter={(v) => formatDate(v)}
-              />
-              <Line yAxisId="left" dataKey="weight" name="Вес, кг" stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 3 }} />
-              <Line yAxisId="left" dataKey="muscle" name="Мышцы, кг" stroke="var(--chart-2)" strokeWidth={2} dot={{ r: 3 }} />
-              <Line yAxisId="right" dataKey="body_fat" name="% жира" stroke="var(--chart-4)" strokeWidth={2} dot={{ r: 3 }} />
-              <Legend
-                wrapperStyle={{ fontSize: '0.78rem' }}
-                formatter={(v) => <span style={{ color: 'var(--text-secondary)' }}>{v}</span>}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+    <>
+      <div className={s.grid}>
+        <Card title="Динамика веса" className={s.fullSpan}>
+          <div style={{ height: 280 }}>
+            <ResponsiveContainer>
+              <LineChart data={data}>
+                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => formatDate(v).slice(0, 6)} />
+                <YAxis yAxisId="left" domain={[minKg - kgPadding, maxKg + kgPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="right" orientation="right" domain={[minFat - fatPadding, maxFat + fatPadding]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)' }}
+                  labelFormatter={(v) => formatDate(v)}
+                />
+                <Line yAxisId="left" dataKey="weight" name="Вес, кг" stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line yAxisId="left" dataKey="muscle" name="Мышцы, кг" stroke="var(--chart-2)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line yAxisId="right" dataKey="body_fat" name="% жира" stroke="var(--chart-4)" strokeWidth={2} dot={{ r: 3 }} />
+                <Legend
+                  wrapperStyle={{ fontSize: '0.78rem' }}
+                  formatter={(v) => <span style={{ color: 'var(--text-secondary)' }}>{v}</span>}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        {a.progress_analysis.insights.length > 0 && (
+          <Card title="Инсайты по прогрессу" className={s.fullSpan}>
+            <ul className={s.insights}>
+              {a.progress_analysis.insights.map((i, idx) => (
+                <li key={idx} className={s.insight} data-type={i.type}>
+                  {i.message}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
+
+      <Card
+        title="История замеров"
+        className={s.fullSpan}
+        actions={!isClient && (
+          <Button size="sm" iconLeft={<Plus size={12} />} onClick={() => setCreating(true)}>
+            Добавить замер
+          </Button>
+        )}
+      >
+        {metricsStore.metrics.length === 0 ? (
+          <Empty title="Замеров нет" description="Добавьте первый замер" />
+        ) : (
+          <div className={s.metricsTableWrap}>
+            <table className={s.metricsTable}>
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Вес</th>
+                  <th>% жира</th>
+                  <th>Мышцы</th>
+                  <th>Грудь</th>
+                  <th>Талия</th>
+                  <th>Бёдра</th>
+                  <th>Пульс</th>
+                  {!isClient && <th>Действия</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {metricsStore.metrics.map(m => (
+                  <tr key={m.id}>
+                    <td>{formatDate(m.measurement_date)}</td>
+                    <td>{m.weight ?? '—'}</td>
+                    <td>{m.body_fat_percentage ?? '—'}</td>
+                    <td>{m.muscle_mass ?? '—'}</td>
+                    <td>{m.chest_cm ?? '—'}</td>
+                    <td>{m.waist_cm ?? '—'}</td>
+                    <td>{m.hips_cm ?? '—'}</td>
+                    <td>{m.resting_heart_rate ?? '—'}</td>
+                    {!isClient && (
+                      <td>
+                        <div className={s.rowActions}>
+                          <button type="button" className={s.iconBtn} onClick={() => setEditingMetric(m)} title="Редактировать">
+                            <Edit2 size={13} />
+                          </button>
+                          <button type="button" className={s.iconBtn} onClick={() => setDeletingMetric(m)} title="Удалить">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
-      {a.progress_analysis.insights.length > 0 && (
-        <Card title="Инсайты по прогрессу" className={s.fullSpan}>
-          <ul className={s.insights}>
-            {a.progress_analysis.insights.map((i, idx) => (
-              <li key={idx} className={s.insight} data-type={i.type}>
-                {i.message}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-    </div>
+      <MetricModal
+        open={creating || !!editingMetric}
+        onClose={() => { setCreating(false); setEditingMetric(null); }}
+        clientId={a.client.id}
+        metric={editingMetric}
+      />
+      <ConfirmDialog
+        open={!!deletingMetric}
+        onCancel={() => setDeletingMetric(null)}
+        onConfirm={async () => {
+          if (deletingMetric) {
+            await metricsStore.delete(deletingMetric.id);
+            setDeletingMetric(null);
+            analyticsStore.loadClient(a.client.id);
+          }
+        }}
+        title="Удалить замер?"
+        message={deletingMetric ? `Замер от ${formatDate(deletingMetric.measurement_date)} будет удалён.` : ''}
+      />
+    </>
+  );
+});
+
+interface MetricModalProps {
+  open: boolean;
+  onClose: () => void;
+  clientId: number;
+  metric: any | null;
+}
+
+const MetricModal = observer(({ open, onClose, clientId, metric }: MetricModalProps) => {
+  const isEdit = !!metric;
+  const [form, setForm] = useState<ClientMetricsCreate>({
+    client_id: clientId,
+    measurement_date: new Date().toISOString().slice(0, 10),
+    weight: null,
+    body_fat_percentage: null,
+    muscle_mass: null,
+    chest_cm: null,
+    waist_cm: null,
+    hips_cm: null,
+    biceps_cm: null,
+    thighs_cm: null,
+    resting_heart_rate: null,
+    max_pushups: null,
+    max_pullups: null,
+    plank_seconds: null,
+    run_5km_minutes: null,
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (metric) {
+      setForm({
+        client_id: clientId,
+        measurement_date: metric.measurement_date,
+        weight: metric.weight,
+        body_fat_percentage: metric.body_fat_percentage,
+        muscle_mass: metric.muscle_mass,
+        chest_cm: metric.chest_cm,
+        waist_cm: metric.waist_cm,
+        hips_cm: metric.hips_cm,
+        biceps_cm: metric.biceps_cm,
+        thighs_cm: metric.thighs_cm,
+        resting_heart_rate: metric.resting_heart_rate,
+        max_pushups: metric.max_pushups,
+        max_pullups: metric.max_pullups,
+        plank_seconds: metric.plank_seconds,
+        run_5km_minutes: metric.run_5km_minutes,
+      });
+    } else {
+      setForm({
+        client_id: clientId,
+        measurement_date: new Date().toISOString().slice(0, 10),
+        weight: null,
+        body_fat_percentage: null,
+        muscle_mass: null,
+        chest_cm: null,
+        waist_cm: null,
+        hips_cm: null,
+        biceps_cm: null,
+        thighs_cm: null,
+        resting_heart_rate: null,
+        max_pushups: null,
+        max_pullups: null,
+        plank_seconds: null,
+        run_5km_minutes: null,
+      });
+    }
+  }, [metric, clientId]);
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    if (isEdit) {
+      const ok = await metricsStore.update(metric.id, form as ClientMetricsUpdate);
+      if (ok) {
+        analyticsStore.loadClient(clientId);
+        onClose();
+      }
+    } else {
+      const id = await metricsStore.create(form);
+      if (id !== null) {
+        analyticsStore.loadClient(clientId);
+        onClose();
+      }
+    }
+    setSubmitting(false);
+  };
+
+  const updateField = <K extends keyof ClientMetricsCreate>(key: K, value: ClientMetricsCreate[K]) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? 'Редактировать замер' : 'Новый замер'}
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button form="metric-form" type="submit" loading={submitting}>
+            {isEdit ? 'Сохранить' : 'Добавить'}
+          </Button>
+        </>
+      }
+    >
+      <form id="metric-form" onSubmit={onSubmit} className={s.metricForm}>
+        <Field label="Дата замера" required>
+          <Input type="date" value={form.measurement_date} onChange={e => updateField('measurement_date', e.target.value)} required />
+        </Field>
+        <div className={s.metricGrid}>
+          <Field label="Вес, кг">
+            <Input type="number" step="0.1" value={form.weight ?? ''} onChange={e => updateField('weight', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="% жира">
+            <Input type="number" step="0.1" value={form.body_fat_percentage ?? ''} onChange={e => updateField('body_fat_percentage', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Мышцы, кг">
+            <Input type="number" step="0.1" value={form.muscle_mass ?? ''} onChange={e => updateField('muscle_mass', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Грудь, см">
+            <Input type="number" step="0.1" value={form.chest_cm ?? ''} onChange={e => updateField('chest_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Талия, см">
+            <Input type="number" step="0.1" value={form.waist_cm ?? ''} onChange={e => updateField('waist_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Бёдра, см">
+            <Input type="number" step="0.1" value={form.hips_cm ?? ''} onChange={e => updateField('hips_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Бицепс, см">
+            <Input type="number" step="0.1" value={form.biceps_cm ?? ''} onChange={e => updateField('biceps_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Бедра, см">
+            <Input type="number" step="0.1" value={form.thighs_cm ?? ''} onChange={e => updateField('thighs_cm', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Пульс покоя">
+            <Input type="number" value={form.resting_heart_rate ?? ''} onChange={e => updateField('resting_heart_rate', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Отжимания">
+            <Input type="number" value={form.max_pushups ?? ''} onChange={e => updateField('max_pushups', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Подтягивания">
+            <Input type="number" value={form.max_pullups ?? ''} onChange={e => updateField('max_pullups', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Планка, сек">
+            <Input type="number" value={form.plank_seconds ?? ''} onChange={e => updateField('plank_seconds', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+          <Field label="Бег 5 км, мин">
+            <Input type="number" step="0.1" value={form.run_5km_minutes ?? ''} onChange={e => updateField('run_5km_minutes', e.target.value ? Number(e.target.value) : null)} />
+          </Field>
+        </div>
+      </form>
+    </Modal>
   );
 });
 

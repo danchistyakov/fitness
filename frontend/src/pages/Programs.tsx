@@ -70,7 +70,7 @@ const Programs = observer(() => {
   return (
     <Page
       title="Программы"
-      subtitle={isClient ? 'Назначенные вам тренировочные программы' : `Всего: ${programsStore.programs.length}`}
+      subtitle={isClient ? 'Назначенные вам тренировочные программы' : `Всего: ${programsStore.programs.length} шт.`}
       actions={!isClient && (
         <Button iconLeft={<Plus size={14} />} onClick={() => setCreating(true)}>
           Создать программу
@@ -218,7 +218,6 @@ const ProgramCopyModal = observer(({ program, onClose }: CopyModalProps) => {
   const [submitting, setSubmitting] = useState(false);
 
   const clientOptions = clientsStore.clients
-    .filter(c => program ? c.id !== program.client_id : true)
     .map(c => ({ value: c.id, label: c.name, hint: c.email }));
 
   if (!program) return null;
@@ -250,7 +249,8 @@ const ProgramCopyModal = observer(({ program, onClose }: CopyModalProps) => {
       }
     >
       <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-4)', fontSize: '0.88rem' }}>
-        Копия программы <strong>«{program.name}»</strong> будет назначена выбранному клиенту вместе со всеми упражнениями.
+        Копия программы <strong>«{program.name}»</strong> будет назначена выбранному клиенту.
+        {targetClient === program.client_id && ' Исходная программа будет архивирована (смена тренировочного цикла).'}
       </p>
       <Field label="Целевой клиент" required>
         <Combobox

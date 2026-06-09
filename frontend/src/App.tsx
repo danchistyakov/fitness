@@ -45,6 +45,14 @@ const ProtectedRoute = observer(({ element, pageId, ownershipCheck }: ProtectedP
   return element;
 });
 
+const HomeRedirect = observer(() => {
+  if (!authStore.isAuthenticated) return <Navigate to="/login" replace />;
+  const role = authStore.role;
+  if (role === 'client') return <Navigate to="/programs" replace />;
+  if (role === 'trainer') return <Navigate to="/clients" replace />;
+  return <ProtectedRoute element={<Dashboard />} pageId="dashboard" />;
+});
+
 const ClientOwnedRoute = observer(({ element }: { element: ReactElement }) => {
   if (!authStore.isAuthenticated) return <Navigate to="/login" replace />;
   const { id } = useParams<{ id: string }>();
@@ -74,7 +82,7 @@ const AppLayout = observer(() => {
       <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
       <main className="main-content">
         <Routes>
-          <Route path="/"                    element={<ProtectedRoute element={<Dashboard />}          pageId="dashboard" />} />
+          <Route path="/"                    element={<HomeRedirect />} />
           <Route path="/clients"             element={<ProtectedRoute element={<Clients />}            pageId="clients" />} />
           <Route path="/clients/:id"         element={<ClientOwnedRoute element={<ClientProfile />} />} />
           <Route path="/exercises"           element={<ProtectedRoute element={<Exercises />}          pageId="exercises" />} />

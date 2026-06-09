@@ -44,7 +44,7 @@ const TrainersAccounts = observer(() => {
       }
     }
     return trainersStore.trainers
-      .filter(t => t.is_active === 1)
+      .filter(t => !!t.is_active)
       .map(t => ({ trainer: t, user: userMap.get(t.id) }))
       .filter(a => {
         if (!search) return true;
@@ -102,7 +102,7 @@ const TrainersAccounts = observer(() => {
       header: 'Статус',
       width: '110px',
       cell: a => {
-        const isActive = a.user?.is_active === 1;
+        const isActive = !!a.user?.is_active;
         return (
           <Badge variant={isActive ? 'success' : 'neutral'} size="sm">
             {isActive ? 'Активен' : 'Деактив.'}
@@ -122,7 +122,7 @@ const TrainersAccounts = observer(() => {
   return (
     <Page
       title="Аккаунты тренеров"
-      subtitle={`Всего: ${accounts.length}`}
+      subtitle={`Всего: ${accounts.length} шт.`}
       actions={
         <Button
           iconLeft={<Plus size={14} />}

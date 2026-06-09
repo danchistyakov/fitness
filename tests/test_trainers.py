@@ -1,4 +1,5 @@
-def test_create_trainer_auto_user(client, admin_token):
+def test_create_trainer_and_user(client, admin_token):
+    # 1. Создаём тренера — учётная запись генерируется автоматически
     r = client.post(
         "/api/trainers",
         json={"name": "Тест Тренер", "specialization": "Сила", "experience_years": 5},
@@ -6,11 +7,16 @@ def test_create_trainer_auto_user(client, admin_token):
     )
     assert r.status_code == 200
     data = r.json()
-    assert "login" in data
+    trainer_id = data["id"]
+    login = data["login"]
+    password = data["password"]
+    assert login is not None
+    assert password is not None
 
-    # проверим, что учётка создана
-    r2 = client.post("/api/auth/login", json={"login": data["login"], "password": data["login"]})
-    assert r2.status_code == 200
+    # проверим, что можно войти под сгенерированными credentials
+    r3 = client.post("/api/auth/login", json={"login": login, "password": password})
+    assert r3.status_code == 200
+    assert r3.json()["user"]["role"] == "trainer"
 
 
 def test_update_trainer(client, admin_token):

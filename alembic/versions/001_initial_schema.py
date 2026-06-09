@@ -20,6 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Новые колонки для существующих таблиц
     op.add_column("clients", sa.Column("height", sa.Float(), nullable=True))
+    op.add_column("clients", sa.Column("churn_date", sa.Date(), nullable=True))
     op.add_column("clients", sa.Column("trainer_id", sa.Integer(), nullable=True))
 
     op.add_column("exercises", sa.Column("secondary_muscle_groups", sa.String(), nullable=True))

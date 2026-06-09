@@ -1,31 +1,14 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
-import math
-import os
-import random
-import secrets
-import sqlite3
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy import select, insert, update, delete, func, text
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, update, delete
 
-from db import engine, SessionLocal
 from dependencies import (
-    get_db, get_db_raw, orm_to_dict,
+    get_db, orm_to_dict,
     get_current_user, require_roles,
-    _check_trainer_owns_client, _check_trainer_owns_program,
-    _check_trainer_owns_session, _check_trainer_owns_client_raw,
-    _hash_password, _verify_password,
-    DAY_NAMES, PBKDF2_ITERATIONS, active_tokens,
 )
-from schemas import *
-from models import (
-    Client, Trainer, Exercise, TrainingProgram, ProgramExercise,
-    TrainingSession, SessionExercise, ClientMetric, ClientGoal,
-    Recommendation, User, TrainingCalendar
-)
-import numpy as np
+from schemas import ExerciseCreate, ExerciseUpdate
+from models import Exercise
 
 router = APIRouter()
 
@@ -34,6 +17,7 @@ router = APIRouter()
 @router.get("/api/exercises")
 async def get_exercises(
     muscle_group: Optional[str] = None,
+    load_type: Optional[str] = None,
     difficulty: Optional[str] = None,
     search: Optional[str] = None,
     user: dict = Depends(get_current_user),
@@ -42,6 +26,8 @@ async def get_exercises(
         stmt = select(Exercise)
         if muscle_group:
             stmt = stmt.where(Exercise.muscle_group == muscle_group)
+        if load_type:
+            stmt = stmt.where(Exercise.load_type == load_type)
         if difficulty:
             stmt = stmt.where(Exercise.difficulty == difficulty)
         if search:
@@ -90,7 +76,7 @@ async def update_exercise(
 @router.delete("/api/exercises/{exercise_id}")
 async def delete_exercise(
     exercise_id: int,
-    user: dict = Depends(require_roles("admin")),
+    user: dict = Depends(require_roles("admin", "trainer")),
 ):
     with get_db() as session:
         session.execute(delete(Exercise).where(Exercise.id == exercise_id))

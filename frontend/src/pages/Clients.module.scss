@@ -85,6 +85,15 @@
   @include mobile { grid-template-columns: 1fr; }
 }
 
+.sectionTitle {
+  font-size: 0.85rem;
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: var(--space-2);
+}
+
 .warnLabel {
   display: inline-flex;
   align-items: center;

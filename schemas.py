@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,19 @@ class ClientCreate(BaseModel):
     health_notes: Optional[str] = None
     contraindications: Optional[str] = None
     height: Optional[float] = None
+    weight: Optional[float] = None
+    body_fat_percentage: Optional[float] = None
+    muscle_mass: Optional[float] = None
+    chest_cm: Optional[float] = None
+    waist_cm: Optional[float] = None
+    hips_cm: Optional[float] = None
+    biceps_cm: Optional[float] = None
+    thighs_cm: Optional[float] = None
+    resting_heart_rate: Optional[int] = None
+    max_pushups: Optional[int] = None
+    max_pullups: Optional[int] = None
+    plank_seconds: Optional[int] = None
+    run_5km_minutes: Optional[float] = None
     trainer_id: Optional[int] = None
 
 
@@ -30,6 +43,19 @@ class ClientUpdate(BaseModel):
     contraindications: Optional[str] = None
     is_active: Optional[bool] = None
     height: Optional[float] = None
+    weight: Optional[float] = None
+    body_fat_percentage: Optional[float] = None
+    muscle_mass: Optional[float] = None
+    chest_cm: Optional[float] = None
+    waist_cm: Optional[float] = None
+    hips_cm: Optional[float] = None
+    biceps_cm: Optional[float] = None
+    thighs_cm: Optional[float] = None
+    resting_heart_rate: Optional[int] = None
+    max_pushups: Optional[int] = None
+    max_pullups: Optional[int] = None
+    plank_seconds: Optional[int] = None
+    run_5km_minutes: Optional[float] = None
     trainer_id: Optional[int] = None
 
 
@@ -37,6 +63,8 @@ class TrainerCreate(BaseModel):
     name: str
     specialization: Optional[str] = None
     experience_years: Optional[int] = None
+    login: Optional[str] = None
+    password: Optional[str] = None
 
 
 class TrainingProgramCreate(BaseModel):
@@ -160,6 +188,7 @@ class UserCreate(BaseModel):
     full_name: str
     trainer_id: Optional[int] = None
     client_id: Optional[int] = None
+    is_active: Optional[bool] = True
 
 
 class UserUpdate(BaseModel):
@@ -192,3 +221,5 @@ class ClientGoalUpdate(BaseModel):
     metric: Optional[str] = None
     target_value: Optional[float] = None
     target_date: Optional[date] = None
+    status: Optional[str] = None
+    achieved_at: Optional[datetime] = None
